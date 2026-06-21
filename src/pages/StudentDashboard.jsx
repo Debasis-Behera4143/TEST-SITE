@@ -1,0 +1,1707 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { mockDb } from '../database/mockDb';
+import { supabase, isLiveMode } from '../database/supabaseClient';
+import { encryptPayload } from '../utils/crypto';
+import DashboardHeader from '../components/DashboardHeader';
+import NotificationBell from '../components/NotificationBell';
+import { Button, Card, Modal, Input, Dropdown, Table, Notification, ChartContainer, Skeleton, EmptyState } from '../components/ui';
+import { 
+  BookOpen, Award, CheckCircle, Clock, Calendar, Download, Upload, Eye, Trophy, Star, Sparkles, 
+  Activity, ArrowUpRight, BarChart2, Bell, AlertTriangle, FileText, CheckCircle2, ChevronRight, LogOut, Flame,
+  ShieldCheck
+} from 'lucide-react';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import confetti from 'canvas-confetti';
+
+// Subject Sandbox Canvas Widgets
+import PhysicsSandbox from '../components/subject-widgets/PhysicsSandbox';
+import ChemistrySandbox from '../components/subject-widgets/ChemistrySandbox';
+import BiologySandbox from '../components/subject-widgets/BiologySandbox';
+import MathSandbox from '../components/subject-widgets/MathSandbox';
+import EnglishSandbox from '../components/subject-widgets/EnglishSandbox';
+
+// Notification & Milestones Animations
+import PaperPlaneNotification from '../components/PaperPlaneNotification';
+import RocketSubmission from '../components/RocketSubmission';
+
+export const StudentDashboard = () => {
+  const { user, student, logout, theme } = useAuth();
+  const [tests, setTests] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
+  const [results, setResults] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [badges, setBadges] = useState([]);
+  const [certificates, setCertificates] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  
+  // Dashboard Tabs: 'overview' | 'tests' | 'analytics' | 'museum' | 'achievements'
+  const [activeTab, setActiveTab] = useState('overview');
+
+  // Interactive Modals
+  const [selectedResult, setSelectedResult] = useState(null);
+  const [selectedTestToSubmit, setSelectedTestToSubmit] = useState(null);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadFileType, setUploadFileType] = useState('pdf');
+  const [uploadStatus, setUploadStatus] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
+  const [simulateNetworkDrop, setSimulateNetworkDrop] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Proctoring states
+  const [isProctoringActive, setIsProctoringActive] = useState(false);
+  const [proctoringViolations, setProctoringViolations] = useState(0);
+  const [proctoringLocked, setProctoringLocked] = useState(false);
+
+  // Gamification states
+  const [streakCount, setStreakCount] = useState(5);
+  const [planeTrigger, setPlaneTrigger] = useState(false);
+  const [rocketTrigger, setRocketTrigger] = useState(false);
+
+  // Result Vault States
+  const [vaultOpened, setVaultOpened] = useState(false);
+  const [countUpMarks, setCountUpMarks] = useState(0);
+  const [dataLoading, setDataLoading] = useState(true);
+
+  // Easter Eggs Alert
+  const [eggMsg, setEggMsg] = useState('');
+
+  // Load data
+  const loadDashboardData = async () => {
+    if (!user) return;
+    try {
+      if (isLiveMode && supabase) {
+        // Supabase DB fetch — only tests assigned to this student
+        const { data: assignedRows } = await supabase
+          .from('test_assignments')
+          .select('test_id')
+          .eq('student_id', user.id);
+        const assignedIds = (assignedRows || []).map(r => r.test_id);
+        if (assignedIds.length > 0) {
+          const { data: tList } = await supabase.from('tests').select('*').in('id', assignedIds);
+          setTests(tList || []);
+        } else {
+          setTests([]);
+        }
+
+        const { data: sList } = await supabase.from('submissions').select('*').eq('student_id', user.id);
+        setSubmissions(sList || []);
+
+        const subIds = (sList || []).map(s => s.id);
+        if (subIds.length > 0) {
+          const { data: rList } = await supabase
+            .from('results')
+            .select('*')
+            .in('submission_id', subIds)
+            .eq('status', 'published');
+          setResults(rList || []);
+        }
+
+        const { data: lead } = await supabase.from('leaderboard').select('*').order('rank', { ascending: true });
+        setLeaderboard(lead || []);
+
+        const { data: bdgList } = await supabase.from('badges').select('*').eq('student_id', user.id);
+        setBadges(bdgList || []);
+
+        const { data: certList } = await supabase.from('certificates').select('*').eq('student_id', user.id);
+        setCertificates(certList || []);
+      } else {
+        // Mock DB fetch — only assigned tests for this student
+        const tList = await mockDb.getAssignedTests(user.id);
+        setTests(tList);
+
+        const sList = await mockDb.getSubmissions();
+        const studentSubs = sList.filter(s => s.student_id === user.id);
+        setSubmissions(studentSubs);
+
+        // Only load published results
+        const studentResults = await mockDb.getStudentResults(user.id);
+        setResults(studentResults);
+
+        const lead = await mockDb.getLeaderboard();
+        setLeaderboard(lead);
+
+        const bdg = await mockDb.getBadges(user.id);
+        setBadges(bdg);
+
+        const certs = await mockDb.getCertificates(user.id);
+        setCertificates(certs);
+
+        const notifs = await mockDb.getNotifications(user.id);
+        setNotifications(notifs);
+      }
+    } catch (err) {
+      console.error("Error loading student dashboard data:", err);
+    } finally {
+      setTimeout(() => setDataLoading(false), 600);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboardData();
+
+    // Trigger paper plane notification on initial entrance
+    const planeTimer = setTimeout(() => {
+      setPlaneTrigger(true);
+    }, 2500);
+
+    return () => clearTimeout(planeTimer);
+  }, [user]);
+
+  // Count up animation inside result vault
+  useEffect(() => {
+    if (selectedResult && vaultOpened) {
+      setCountUpMarks(0);
+      let current = 0;
+      const target = selectedResult.result.marks_obtained;
+      const stepVal = Math.max(1, target / 30);
+      const timer = setInterval(() => {
+        current += stepVal;
+        if (current >= target) {
+          setCountUpMarks(target);
+          clearInterval(timer);
+        } else {
+          setCountUpMarks(Math.round(current));
+        }
+      }, 25);
+      return () => clearInterval(timer);
+    }
+  }, [selectedResult, vaultOpened]);
+
+  // Exam Proctoring & Integrity listener
+  useEffect(() => {
+    if (!isProctoringActive) return;
+
+    // Fullscreen enforcement check
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setProctoringViolations(prev => {
+          const next = prev + 1;
+          if (next >= 3) {
+            setProctoringLocked(true);
+          }
+          return next;
+        });
+        alert("🚨 Security Violation: You exited fullscreen mode! Leaving fullscreen is monitored and recorded.");
+      }
+    };
+
+    // Tab switching check (Visibility API)
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setProctoringViolations(prev => {
+          const next = prev + 1;
+          if (next >= 3) {
+            setProctoringLocked(true);
+          }
+          return next;
+        });
+        alert("🚨 Security Violation: Tab switching detected! Switching browser tabs or applications during the exam is prohibited.");
+      }
+    };
+
+    // Copy/paste blocking
+    const handleCopyPaste = (e) => {
+      e.preventDefault();
+      alert("🚨 Security Action: Clipboard access (copy, cut, paste) is disabled during the exam.");
+    };
+
+    // Right-click blocking
+    const handleContextMenu = (e) => {
+      e.preventDefault();
+      alert("🚨 Security Action: Context menu (right-click) is disabled during the exam.");
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('copy', handleCopyPaste);
+    document.addEventListener('paste', handleCopyPaste);
+    document.addEventListener('cut', handleCopyPaste);
+    document.addEventListener('contextmenu', handleContextMenu);
+
+    // Enter fullscreen
+    const docEl = document.documentElement;
+    if (docEl.requestFullscreen) {
+      docEl.requestFullscreen().catch(err => {
+        console.warn("Fullscreen request failed:", err);
+      });
+    }
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('copy', handleCopyPaste);
+      document.removeEventListener('paste', handleCopyPaste);
+      document.removeEventListener('cut', handleCopyPaste);
+      document.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, [isProctoringActive]);
+
+  // Submit Answer Sheet handler
+  const handleAnswerSubmit = (e) => {
+    if (e) e.preventDefault();
+    if (!uploadFile) {
+      setUploadStatus("Please specify a document to upload.");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadStatus("Uploading document...");
+    setUploadProgress(0);
+    setUploadError(null);
+
+    let progress = 0;
+    const interval = setInterval(async () => {
+      progress += 10;
+      setUploadProgress(progress);
+
+      if (progress === 60 && simulateNetworkDrop) {
+        clearInterval(interval);
+        setIsUploading(false);
+        setUploadError("Network Connection Timeout: Transmit payload failed due to simulated network drop.");
+        setUploadStatus("Upload failed.");
+        return;
+      }
+
+      if (progress >= 100) {
+        clearInterval(interval);
+        try {
+          let fileUrl = '';
+          if (isLiveMode && supabase) {
+            // Upload actual file to Supabase Storage bucket 'answer-sheets'
+            const storagePath = `${user.id}_${selectedTestToSubmit.id}_${Date.now()}_answers.${uploadFileType}`;
+            const { data, error: uploadErr } = await supabase.storage
+              .from('answer-sheets')
+              .upload(storagePath, uploadFile);
+
+            if (uploadErr) throw uploadErr;
+
+            const { data: { publicUrl } } = supabase.storage
+              .from('answer-sheets')
+              .getPublicUrl(storagePath);
+
+            fileUrl = publicUrl;
+          } else {
+            fileUrl = `${user.name.toLowerCase().replace(/\s+/g, '_')}_${selectedTestToSubmit.title.slice(0, 10).toLowerCase().replace(/\s+/g, '_')}_answers.${uploadFileType}`;
+          }
+          
+          const encryptedUrl = `e2ee:${encryptPayload(fileUrl)}`;
+          await mockDb.addSubmission(selectedTestToSubmit.id, user.id, encryptedUrl, uploadFileType);
+          setUploadStatus("Payload locked. Launching submission rocket!");
+          setIsProctoringActive(false);
+          setProctoringViolations(0);
+          setProctoringLocked(false);
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(err => {
+              console.warn("Fullscreen exit failed:", err);
+            });
+          }
+          
+          setTimeout(() => {
+            setSelectedTestToSubmit(null);
+            setRocketTrigger(true);
+            setUploadFile(null);
+            setUploadStatus('');
+            setUploadProgress(null);
+            setIsUploading(false);
+          }, 600);
+
+          loadDashboardData();
+        } catch (err) {
+          setUploadError(err.message);
+          setUploadStatus(`Upload failed: ${err.message}`);
+          setIsUploading(false);
+        }
+      }
+    }, 150);
+  };
+
+  // Download printable PDF certificate simulation
+  const handleDownloadCertificate = (cert) => {
+    const doc = window.open("", "_blank");
+    doc.document.write(`
+      <html>
+        <head>
+          <title>Certificate - ${cert.certificate_type}</title>
+          <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@800&family=Plus+Jakarta+Sans:wght@300;600&display=swap" rel="stylesheet">
+          <style>
+            body {
+              background: #0f172a;
+              color: #f8fafc;
+              font-family: 'Plus Jakarta Sans', sans-serif;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              height: 100vh;
+              margin: 0;
+            }
+            .cert-box {
+              border: 10px solid #38bdf8;
+              border-image: linear-gradient(135deg, #0ea5e9, #a855f7) 10;
+              padding: 50px;
+              width: 700px;
+              text-align: center;
+              background: rgba(30, 41, 59, 0.5);
+              border-radius: 8px;
+              box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            }
+            h1 {
+              font-family: 'Outfit', sans-serif;
+              font-size: 40px;
+              color: #38bdf8;
+              margin: 0 0 10px 0;
+              letter-spacing: 2px;
+            }
+            p { font-size: 16px; margin: 15px 0; font-weight: 300; line-height: 1.6; }
+            .name { font-size: 28px; font-weight: 600; color: #e2e8f0; border-bottom: 2px dashed #a855f7; display: inline-block; padding: 0 20px 5px 20px; }
+            .badge-icon { font-size: 60px; margin: 20px 0; }
+            .date { color: #64748b; font-size: 12px; margin-top: 40px; }
+            .btn-print {
+              margin-top: 30px;
+              padding: 10px 20px;
+              background: #a855f7;
+              border: none;
+              color: white;
+              font-weight: bold;
+              border-radius: 6px;
+              cursor: pointer;
+            }
+            @media print {
+              .btn-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="cert-box">
+            <div class="badge-icon">🎓</div>
+            <h1>CERTIFICATE OF ACHIEVEMENT</h1>
+            <p>This is proudly presented to</p>
+            <div class="name">${user.name}</div>
+            <p>for demonstrating academic excellence and earning the title of</p>
+            <h2 style="color: #a855f7; font-family: Outfit; margin: 10px 0;">${cert.certificate_type}</h2>
+            <p>in recognition of outstanding grades and consistent performance on the EduTrack AI platform.</p>
+            <div class="date">Issued on: ${new Date(cert.issued_at).toLocaleDateString()}</div>
+            <button class="btn-print" onclick="window.print()">Print/Download PDF</button>
+          </div>
+        </body>
+      </html>
+    `);
+    doc.document.close();
+  };
+
+  // Download Printable Report Card
+  const handlePrintReportCard = (res, test) => {
+    const doc = window.open("", "_blank");
+    doc.document.write(`
+      <html>
+        <head>
+          <title>Report Card - ${test.title}</title>
+          <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+          <style>
+            body { font-family: 'Plus Jakarta Sans', sans-serif; background: #ffffff; color: #1e293b; padding: 40px; }
+            .card { max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 30px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+            .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #3b82f6; padding-bottom: 15px; }
+            .row { display: flex; justify-content: space-between; margin: 15px 0; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; }
+            .bold { font-weight: 600; }
+            .grade-badge { background: #dcfce7; color: #15803d; padding: 4px 10px; border-radius: 6px; font-weight: bold; }
+            .feedback-box { background: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px; margin-top: 20px; font-style: italic; }
+            .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #64748b; }
+            .btn { display: inline-block; margin-top: 20px; background: #3b82f6; color: white; padding: 10px 20px; border-radius: 6px; font-weight: bold; text-decoration: none; cursor: pointer; text-align: center; }
+            @media print { .btn { display: none; } }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header">
+              <div>
+                <h2 style="margin: 0; color: #3b82f6;">EduTrack AI Report Card</h2>
+                <small>Official Student Progress Report</small>
+              </div>
+              <div style="text-align: right;">
+                <strong>${user.name}</strong><br/>
+                <span style="font-size: 11px; color: #64748b;">${student?.registration_number || 'REG-2026'}</span>
+              </div>
+            </div>
+            
+            <div class="row"><span class="bold">Exam:</span><span>${test.title}</span></div>
+            <div class="row"><span class="bold">Subject:</span><span>${test.subject}</span></div>
+            <div class="row"><span class="bold">Maximum Marks:</span><span>${test.total_marks}</span></div>
+            <div class="row"><span class="bold">Marks Obtained:</span><span>${res.marks_obtained}</span></div>
+            <div class="row"><span class="bold">Percentage:</span><span>${res.percentage}%</span></div>
+            <div class="row"><span class="bold">Grade:</span><span class="grade-badge">${res.grade}</span></div>
+            
+            <div class="feedback-box">
+              <strong>Teacher Remarks:</strong><br/>
+              "${res.feedback || 'Outstanding conceptual grasp.'}"
+            </div>
+
+            {res.ai_feedback?.studentFeedback && (
+              <div class="feedback-box" style="border-left-color: #a855f7; margin-top: 15px; font-size: 13px; line-height: 1.5;">
+                <strong>AI Diagnostic Evaluation:</strong><br/>
+                ${res.ai_feedback.studentFeedback}
+              </div>
+            )}
+
+            {res.ai_feedback?.strengths && (
+              <div class="feedback-box" style="border-left-color: #10b981; margin-top: 15px; font-size: 13px; line-height: 1.5;">
+                <strong>Key Strengths Identified:</strong><br/>
+                ${res.ai_feedback.strengths.map(s => `• ${s}<br/>`).join('')}
+              </div>
+            )}
+
+            {res.ai_feedback?.weakAreas && (
+              <div class="feedback-box" style="border-left-color: #f43f5e; margin-top: 15px; font-size: 13px; line-height: 1.5;">
+                <strong>Areas Needing Practice:</strong><br/>
+                ${res.ai_feedback.weakAreas.map(w => `• ${w}<br/>`).join('')}
+              </div>
+            )}
+
+            {res.ai_feedback?.revisionPlan && (
+              <div class="feedback-box" style="border-left-color: #3b82f6; margin-top: 15px; font-size: 13px; line-height: 1.5;">
+                <strong>7-Day AI Revision Study Plan:</strong><br/>
+                ${res.ai_feedback.revisionPlan}
+              </div>
+            )}
+
+            <div class="footer">
+              This document is digitally verified. Generated on ${new Date(res.published_at).toLocaleDateString()}<br/>
+              <button class="btn" onclick="window.print()">Print Report Card</button>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+    doc.document.close();
+  };
+
+  // Easter Eggs triggers
+  const triggerEasterEgg = (eggType) => {
+    if (eggType === 'rocket') {
+      setEggMsg("🚀 Flying Rocket Easter Egg! Spaceship launched!");
+      setTimeout(() => setEggMsg(''), 3000);
+      confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 } });
+    } else if (eggType === 'six') {
+      setEggMsg("🏏 SIXER! The cricket ball flies out of the stadium!");
+      setTimeout(() => setEggMsg(''), 3000);
+      confetti({ particleCount: 80, spread: 80, origin: { y: 0.6 } });
+    } else if (eggType === 'robot') {
+      setEggMsg("🤖 Dancing Robot Easter Egg! Fact: AI can read handwritten structures.");
+      setTimeout(() => setEggMsg(''), 3500);
+    }
+  };
+
+  // Subject Score Radar Charts Config
+  const performanceData = [
+    { subject: 'Math', score: 85, fullMark: 100 },
+    { subject: 'Physics', score: 90, fullMark: 100 },
+    { subject: 'Chemistry', score: 88, fullMark: 100 },
+    { subject: 'Biology', score: 75, fullMark: 100 },
+    { subject: 'English', score: 92, fullMark: 100 }
+  ];
+
+  const trendData = [
+    { name: 'Month 1', Physics: 75, Mathematics: 80, Chemistry: 70 },
+    { name: 'Month 2', Physics: 82, Mathematics: 85, Chemistry: 78 },
+    { name: 'Month 3', Physics: 85, Mathematics: 82, Chemistry: 85 },
+    { name: 'Month 4', Physics: 90, Mathematics: 88, Chemistry: 88 }
+  ];
+
+  if (dataLoading) {
+    return (
+      <div className="flex-grow flex flex-col justify-between p-6 max-w-7xl mx-auto w-full relative z-10 text-left">
+        {/* Header Skeleton */}
+        <div className={`p-6 rounded-3xl border flex flex-col md:flex-row items-center justify-between gap-6 mb-8 ${
+          theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+        }`}>
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <Skeleton variant="circle" width="64px" height="64px" />
+            <div className="space-y-2">
+              <Skeleton variant="rect" width="180px" height="24px" />
+              <Skeleton variant="rect" width="120px" height="16px" />
+            </div>
+          </div>
+          <div className="flex items-center gap-6 w-full md:w-auto">
+            <div className="space-y-1"><Skeleton variant="rect" width="80px" height="20px" /></div>
+            <div className="space-y-1"><Skeleton variant="rect" width="100px" height="20px" /></div>
+          </div>
+        </div>
+
+        {/* Tabs skeleton */}
+        <div className="flex bg-slate-950/20 p-1.5 rounded-2xl border border-white/5 mb-8 w-fit gap-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} variant="rect" width="100px" height="36px" />
+          ))}
+        </div>
+
+        {/* Content Skeleton Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+          <div className="md:col-span-2 space-y-6">
+            {/* Active Tests skeleton */}
+            <div className={`p-6 rounded-3xl border ${
+              theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+            }`}>
+              <Skeleton variant="rect" width="150px" height="20px" className="mb-4" />
+              <div className="space-y-3">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className="p-4 rounded-2xl border border-white/5 bg-slate-950/10 flex justify-between items-center">
+                    <div className="space-y-2">
+                      <Skeleton variant="rect" width="120px" height="16px" />
+                      <Skeleton variant="rect" width="80px" height="12px" />
+                    </div>
+                    <Skeleton variant="rect" width="100px" height="36px" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Performance Reports skeleton */}
+            <div className={`p-6 rounded-3xl border ${
+              theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+            }`}>
+              <Skeleton variant="rect" width="180px" height="20px" className="mb-4" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className="p-4 rounded-2xl border border-white/5 bg-slate-900/40 space-y-3">
+                    <Skeleton variant="rect" width="100%" height="60px" />
+                    <Skeleton variant="rect" width="80px" height="20px" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {/* Podium skeleton */}
+            <div className={`p-6 rounded-3xl border ${
+              theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+            }`}>
+              <Skeleton variant="rect" width="120px" height="20px" className="mb-4" />
+              <div className="flex items-end justify-center h-44 gap-2 pt-6">
+                <Skeleton variant="rect" width="30%" height="60px" />
+                <Skeleton variant="rect" width="30%" height="100px" />
+                <Skeleton variant="rect" width="30%" height="40px" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-grow flex flex-col justify-between p-6 max-w-7xl mx-auto w-full relative z-10 text-left">
+      
+      {/* Paper Plane Flying Alert */}
+      <PaperPlaneNotification 
+        trigger={planeTrigger} 
+        title="Mathematics Midterm Assigned" 
+        onFinish={() => setPlaneTrigger(false)} 
+      />
+
+      {/* Rocket Submission Overlay */}
+      <RocketSubmission 
+        trigger={rocketTrigger} 
+        onFinish={() => setRocketTrigger(false)} 
+      />
+
+      {/* Easter Egg Floating alerts */}
+      {eggMsg && (
+        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 p-4 rounded-2xl bg-slate-900 border border-brand-cyan/40 text-brand-cyan font-bold text-xs uppercase tracking-wider shadow-2xl flex items-center gap-2 animate-bounce">
+          <Sparkles className="h-4 w-4 animate-spin" />
+          <span>{eggMsg}</span>
+        </div>
+      )}
+
+      {/* Top Welcome Panel */}
+      <DashboardHeader
+        roleLabel="Student"
+        roleColorClass="text-brand-cyan bg-brand-cyan/15 border-brand-cyan/30"
+        notificationSlot={<NotificationBell userId={user?.id} theme={theme} />}
+        nameSuffix={
+          <div 
+            onClick={() => {
+              setStreakCount(prev => prev + 1);
+              triggerEasterEgg('six');
+            }}
+            className="px-2.5 py-1 rounded bg-orange-500/20 border border-orange-500/40 text-[10px] font-bold text-orange-400 flex items-center gap-1 cursor-pointer hover:scale-105 active:scale-95 transition-all shadow shrink-0"
+            title="Click to claim daily streak XP!"
+          >
+            <Flame className="h-3.5 w-3.5 fill-orange-400 animate-pulse" />
+            <span>{streakCount} Day Streak</span>
+          </div>
+        }
+        subtitle={
+          <p className={`text-xs font-light mt-1 text-left ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+            Class: {student?.class_name || 'Unassigned'} | ID: <span className="font-mono font-bold">{student?.registration_number || 'Unregistered'}</span>
+          </p>
+        }
+        statsContainer={
+          <>
+            <div className="relative flex items-center justify-center shrink-0">
+              <svg className="w-16 h-16 transform -rotate-90">
+                <circle cx="32" cy="32" r="28" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} strokeWidth="5" fill="transparent" />
+                <circle cx="32" cy="32" r="28" stroke="url(#cyanGlowGrad)" strokeWidth="5" fill="transparent" 
+                  strokeDasharray={2 * Math.PI * 28} 
+                  strokeDashoffset={2 * Math.PI * 28 * (1 - ((student?.xp % 1000) / 1000))} 
+                  strokeLinecap="round"
+                />
+                <defs>
+                  <linearGradient id="cyanGlowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#06b6d4" />
+                    <stop offset="100%" stopColor="#a855f7" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div className="absolute text-center">
+                <span className="block text-[8px] uppercase tracking-wider text-slate-400">Level</span>
+                <span className="text-sm font-extrabold text-slate-900 dark:text-white">{student?.level || 1}</span>
+              </div>
+            </div>
+
+            <div className="text-left shrink-0">
+              <span className="text-[10px] uppercase tracking-wider font-extrabold text-brand-purple flex items-center gap-1">
+                <Star className="h-3.5 w-3.5 fill-brand-purple" />
+                XP SCOREBOARD
+              </span>
+              <span className="block text-xl font-extrabold text-brand-cyan mt-0.5">{student?.xp || 0} XP</span>
+              <span className={`block text-[9px] font-light ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                {(1000 - ((student?.xp || 0) % 1000))} XP to level {((student?.level || 1) + 1)}
+              </span>
+            </div>
+
+            <div className="border-l border-white/5 pl-6 text-left shrink-0">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Class Rank</span>
+              <span className="block text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">{student?.rank ? `#${student.rank}` : '-'}</span>
+            </div>
+          </>
+        }
+      />
+
+      {/* Tabs Switcher including Museum */}
+      <div className="flex bg-slate-950/20 p-1.5 rounded-2xl border border-white/5 mb-8 w-fit overflow-x-auto no-scrollbar">
+        {['overview', 'tests', 'analytics', 'museum', 'achievements'].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-5 py-2.5 text-xs font-bold rounded-xl uppercase tracking-wider transition-all whitespace-nowrap ${
+              activeTab === tab
+                ? 'bg-slate-800 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {tab === 'museum' ? '🏛️ 3D Science Museum' : tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Trigger Buttons for Easter Eggs */}
+      <div className="flex gap-2 mb-6">
+        <button onClick={() => triggerEasterEgg('six')} className="px-3 py-1.5 rounded-xl border border-white/10 text-[10px] font-bold uppercase bg-slate-900 text-slate-300 hover:border-brand-purple">
+          🏏 Trigger Six
+        </button>
+        <button onClick={() => triggerEasterEgg('rocket')} className="px-3 py-1.5 rounded-xl border border-white/10 text-[10px] font-bold uppercase bg-slate-900 text-slate-300 hover:border-brand-cyan">
+          🚀 Trigger Rocket
+        </button>
+        <button onClick={() => triggerEasterEgg('robot')} className="px-3 py-1.5 rounded-xl border border-white/10 text-[10px] font-bold uppercase bg-slate-900 text-slate-300 hover:border-brand-pink">
+          🤖 Trigger Robot
+        </button>
+      </div>
+
+      {/* Grid Dashboard Modules */}
+      {activeTab === 'overview' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+          
+          {/* Quick widgets list */}
+          <div className="md:col-span-2 space-y-6">
+            
+            {/* Upcoming/Assigned Tests Card */}
+            <div className={`p-6 rounded-3xl border ${
+              theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+            }`}>
+              <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
+                <BookOpen className="h-5 w-5 text-brand-cyan" />
+                Active Assigned Tests
+              </h3>
+              
+              <div className="space-y-3">
+                {tests.length === 0 ? (
+                  <EmptyState
+                    icon={BookOpen}
+                    title="No Assigned Tests"
+                    description="You are all caught up! No active exam or test sheets have been assigned to your profile."
+                    iconColorClass="text-brand-cyan border-brand-cyan/20 bg-brand-cyan/10"
+                    className="w-full py-8"
+                  />
+                ) : (
+                  tests.map((t) => {
+                    const submission = submissions.find(s => s.test_id === t.id);
+                    const result = submission ? results.find(r => r.submission_id === submission.id) : null;
+
+                    return (
+                      <div key={t.id} className="p-4 rounded-2xl border border-white/5 bg-slate-950/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:border-brand-cyan/20 transition-all">
+                        <div>
+                          <span className="px-2 py-0.5 rounded bg-brand-purple/20 text-[9px] font-bold text-brand-purple uppercase">
+                            {t.subject}
+                          </span>
+                          <h4 className="font-bold text-sm mt-1.5">{t.title}</h4>
+                          <div className="flex items-center gap-4 mt-2 text-[10px] text-slate-400 font-light">
+                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> Due: {new Date(t.deadline).toLocaleDateString()}</span>
+                            <span>•</span>
+                            <span>Marks: {t.total_marks}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => window.open(t.question_paper_url, '_blank')}
+                            className="p-2.5 rounded-xl bg-slate-900 border border-white/10 hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5"
+                            title="Download PDF"
+                          >
+                            <Download className="h-3.5 w-3.5 text-brand-cyan" />
+                            Question
+                          </button>
+                          
+                          {submission ? (
+                            submission.status === 'evaluated' && result ? (
+                              <button
+                                onClick={() => {
+                                  setVaultOpened(false);
+                                  setSelectedResult({ result, test: t });
+                                }}
+                                className="px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-1"
+                              >
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                Grade: {result.grade} ({result.marks_obtained}/{t.total_marks})
+                              </button>
+                            ) : (
+                              <span className="px-4 py-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-semibold flex items-center gap-1">
+                                <Clock className="h-3.5 w-3.5" />
+                                Grading Queue
+                              </span>
+                            )
+                          ) : (
+                            <button
+                              onClick={() => setSelectedTestToSubmit(t)}
+                              className="px-4 py-2.5 rounded-xl bg-brand-purple hover:bg-brand-purple/80 text-xs font-bold text-white flex items-center gap-1.5 shadow-md"
+                            >
+                              <Upload className="h-3.5 w-3.5" />
+                              Submit Work
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Recent Results Viewer List */}
+            <div className={`p-6 rounded-3xl border ${
+              theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+            }`}>
+              <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                Graded Performance Reports
+              </h3>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {results.filter(r => r.status === 'published').length === 0 ? (
+                  <div className="col-span-full">
+                    <EmptyState
+                      icon={CheckCircle2}
+                      title="No Graded Reports"
+                      description="You do not have any published grades or reports yet. Complete your pending test sheets."
+                      iconColorClass="text-emerald-400 border-emerald-500/20 bg-emerald-500/10"
+                      className="w-full py-8"
+                    />
+                  </div>
+                ) : (
+                  results.filter(r => r.status === 'published').map((res) => {
+                    const sub = submissions.find(s => s.id === res.submission_id);
+                    const test = sub ? tests.find(t => t.id === sub.test_id) : null;
+                    if (!test) return null;
+
+                    return (
+                      <div key={res.id} className="p-4 rounded-2xl border border-white/5 bg-slate-900/40 hover:border-emerald-500/20 transition-all flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start">
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-[9px] font-bold text-emerald-400 uppercase">
+                              {test.subject}
+                            </span>
+                            <span className="text-xl font-extrabold text-emerald-400 font-display">{res.grade}</span>
+                          </div>
+                          <h4 className="font-bold text-xs mt-2 truncate" title={test.title}>{test.title}</h4>
+                          <p className="text-[10px] text-slate-400 mt-2 font-mono">
+                            Marks: {res.marks_obtained}/{test.total_marks} ({res.percentage}%)
+                          </p>
+                        </div>
+
+                        <div className="mt-4 flex items-center gap-2 pt-3 border-t border-white/5">
+                          <button
+                            onClick={() => {
+                              setVaultOpened(false);
+                              setSelectedResult({ result: res, test });
+                            }}
+                            className="flex-1 py-2 text-center rounded-xl bg-slate-950/60 border border-white/10 hover:bg-slate-950 text-[10px] font-bold flex items-center justify-center gap-1"
+                          >
+                            <Eye className="h-3 w-3" />
+                            AI Report
+                          </button>
+                          
+                          <button
+                            onClick={() => handlePrintReportCard(res, test)}
+                            className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 text-[10px] font-semibold text-emerald-400"
+                            title="Download Report Card PDF"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Right Sidebar Widgets */}
+          <div className="space-y-6">
+            
+            {/* 3D steps podium Leaderboard */}
+            <div className={`p-6 rounded-3xl border ${
+              theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+            }`}>
+              <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-yellow-400 animate-bounce" />
+                Podium Standings
+              </h3>
+
+              {/* 3D Podium Layout */}
+              {leaderboard.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-center text-xs">
+                  <Trophy className="h-8 w-8 text-slate-500 mb-2" />
+                  <span className="text-slate-400">No leaderboard standings recorded yet.</span>
+                </div>
+              ) : (
+                <div className="flex items-end justify-center h-44 gap-2 pt-6 border-b border-white/5 pb-6">
+                  
+                  {/* Silver Step (2nd) */}
+                  <div className="flex flex-col items-center flex-1">
+                    <span className="text-[9px] font-bold text-slate-300 truncate max-w-[70px]">
+                      {leaderboard[1] ? leaderboard[1].name : 'Vacant'}
+                    </span>
+                    <span className="text-[8px] text-slate-550">
+                      {leaderboard[1] ? `Lv. ${leaderboard[1].level}` : ''}
+                    </span>
+                    <div className="w-full h-16 bg-slate-400/40 rounded-t-xl flex items-center justify-center border border-white/10 shadow-lg mt-2 relative">
+                      <span className="text-lg">🥈</span>
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-600/10 to-transparent" />
+                    </div>
+                  </div>
+
+                  {/* Gold Step (1st) */}
+                  <div className="flex flex-col items-center flex-1 z-10">
+                    <Sparkles className="h-4.5 w-4.5 text-yellow-400 animate-spin absolute -mt-5" />
+                    <span className="text-[10px] font-extrabold text-yellow-400 truncate max-w-[80px]">
+                      {leaderboard[0] ? leaderboard[0].name : 'Vacant'}
+                    </span>
+                    <span className="text-[8px] text-slate-400">
+                      {leaderboard[0] ? `Lv. ${leaderboard[0].level}` : ''}
+                    </span>
+                    <div className="w-full h-24 bg-yellow-500/30 rounded-t-2xl flex items-center justify-center border border-yellow-400/30 shadow-2xl mt-2 relative neon-glow-purple">
+                      <span className="text-2xl">🥇</span>
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(253,224,71,0.2)_0%,transparent_70%)]" />
+                    </div>
+                  </div>
+
+                  {/* Bronze Step (3rd) */}
+                  <div className="flex flex-col items-center flex-1">
+                    <span className="text-[9px] font-bold text-amber-600 truncate max-w-[70px]">
+                      {leaderboard[2] ? leaderboard[2].name : 'Vacant'}
+                    </span>
+                    <span className="text-[8px] text-slate-550">
+                      {leaderboard[2] ? `Lv. ${leaderboard[2].level}` : ''}
+                    </span>
+                    <div className="w-full h-12 bg-amber-700/40 rounded-t-xl flex items-center justify-center border border-white/10 shadow-lg mt-2 relative">
+                      <span className="text-base">🥉</span>
+                      <div className="absolute inset-0 bg-gradient-to-t from-amber-800/10 to-transparent" />
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+              {/* Leaderboard list */}
+              <div className="space-y-2 mt-4">
+                {leaderboard.slice(0, 3).map((lead, idx) => (
+                  <div key={lead.id} className={`p-2 rounded-xl flex items-center justify-between border ${
+                    lead.student_id === user.id 
+                      ? 'border-brand-cyan/40 bg-brand-cyan/10' 
+                      : 'border-transparent bg-slate-900/20'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-extrabold text-slate-500">#{idx + 1}</span>
+                      <img src={lead.avatar} alt="avatar" className="h-6 w-6 rounded bg-white/5 border border-white/10" />
+                      <h4 className="font-bold text-xs truncate max-w-[90px]">{lead.name}</h4>
+                    </div>
+                    <span className="text-xs font-bold text-brand-purple">{lead.monthly_score}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Badges and Rewards checklist */}
+            <div className={`p-6 rounded-3xl border ${
+              theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+            }`}>
+              <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
+                <Award className="h-5 w-5 text-brand-purple" />
+                Unlocked Badges
+              </h3>
+              
+              <div className="flex flex-wrap gap-2">
+                {badges.length === 0 ? (
+                  <p className="text-xs text-slate-400">Assessments pending to unlock badges.</p>
+                ) : (
+                  badges.map((b) => (
+                    <span 
+                      key={b.id} 
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-brand-purple/20 bg-brand-purple/10 text-[10px] font-bold text-brand-purple hover:scale-105 transition-all cursor-pointer"
+                      title={`Unlocked on ${new Date(b.unlocked_at).toLocaleDateString()}`}
+                    >
+                      <Sparkles className="h-3 w-3 text-brand-cyan animate-pulse" />
+                      {b.badge_type}
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* Tests Portal Tab */}
+      {activeTab === 'tests' && (
+        <div className={`p-6 rounded-3xl border text-left ${
+          theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+        }`}>
+          <h3 className="font-display font-extrabold text-xl mb-6">Assigned Question Papers & Submissions</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {tests.map((t) => {
+              const submission = submissions.find(s => s.test_id === t.id);
+              const result = submission ? results.find(r => r.submission_id === submission.id && r.status === 'published') : null;
+
+              return (
+                <div key={t.id} className="p-5 rounded-2xl border border-white/5 bg-slate-900/30 flex flex-col justify-between gap-4">
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-[9px] font-bold text-indigo-400 uppercase">
+                        {t.subject}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-light flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        Deadline: {new Date(t.deadline).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <h4 className="font-bold text-base mt-3">{t.title}</h4>
+                    <p className={`text-xs font-light mt-2 line-clamp-2 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>{t.description}</p>
+                    
+                    <div className="flex items-center gap-4 mt-4 text-xs">
+                      <span className="font-mono">Max Marks: <strong className="text-brand-cyan">{t.total_marks}</strong></span>
+                      <span>•</span>
+                      <span>
+                        Status:{' '}
+                        {submission ? (
+                          <strong className="text-emerald-400">Submitted</strong>
+                        ) : (
+                          <strong className="text-red-400">Pending upload</strong>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-4 border-t border-white/5">
+                    <button
+                      onClick={() => window.open(t.question_paper_url, '_blank')}
+                      className="flex-1 py-2.5 rounded-xl bg-slate-950 border border-white/10 hover:bg-slate-800 text-xs font-bold text-white flex items-center justify-center gap-2"
+                    >
+                      <Download className="h-4 w-4 text-brand-cyan" />
+                      Paper PDF
+                    </button>
+
+                    {submission ? (
+                      submission.status === 'evaluated' && result ? (
+                        <button
+                          onClick={() => {
+                            setVaultOpened(false);
+                            setSelectedResult({ result, test: t });
+                          }}
+                          className="flex-1 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold"
+                        >
+                          Grade: {result.grade} ({result.percentage}%)
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setSelectedTestToSubmit(t)}
+                          className="flex-1 py-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-semibold"
+                        >
+                          Resubmit Answers
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        onClick={() => setSelectedTestToSubmit(t)}
+                        className="flex-1 py-2.5 rounded-xl bg-brand-purple hover:bg-brand-purple/80 text-xs font-bold text-white"
+                      >
+                        Upload Answers
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Graphing Tab */}
+      {activeTab === 'analytics' && (
+        <div className="space-y-6 text-left">
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Subject radar performance */}
+            <div className={`p-6 rounded-3xl border ${
+              theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+            }`}>
+              <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
+                <Activity className="h-5 w-5 text-brand-cyan" />
+                Subject Competency Radar
+              </h3>
+              
+              <div className="h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart cx="50%" cy="50%" radius="80%" data={performanceData}>
+                    <PolarGrid stroke="#334155" />
+                    <PolarAngleAxis dataKey="subject" stroke="#94a3b8" fontSize={11} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#475569" fontSize={9} />
+                    <Radar name="Alex Johnson" dataKey="score" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.25} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Performance trends curve */}
+            <div className={`p-6 rounded-3xl border ${
+              theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+            }`}>
+              <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
+                <BarChart2 className="h-5 w-5 text-brand-purple" />
+                Academic Growth Trend
+              </h3>
+
+              <div className="h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={trendData}>
+                    <defs>
+                      <linearGradient id="mathGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#a855f7" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="physGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="name" stroke="#64748b" fontSize={10} />
+                    <YAxis stroke="#64748b" fontSize={10} />
+                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} />
+                    <Area type="monotone" dataKey="Mathematics" stroke="#a855f7" fillOpacity={1} fill="url(#mathGrad)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="Physics" stroke="#06b6d4" fillOpacity={1} fill="url(#physGrad)" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Weak chapters and strong areas highlights */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div className={`p-6 rounded-3xl border border-red-500/10 bg-red-500/5`}>
+              <h4 className="font-display font-bold text-base text-red-400 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                Focus Chapters (Improvement Needed)
+              </h4>
+              <ul className="mt-4 space-y-2 text-xs font-light text-slate-300">
+                <li className="flex justify-between items-center p-2 rounded bg-slate-950/20">
+                  <span>Chemical Equilibrium & Catalyst Rates</span>
+                  <span className="text-red-400 font-semibold font-mono">CHEM-303</span>
+                </li>
+                <li className="flex justify-between items-center p-2 rounded bg-slate-950/20">
+                  <span>Three-Dimensional Vector Coordinates</span>
+                  <span className="text-red-400 font-semibold font-mono">MATH-101</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className={`p-6 rounded-3xl border border-emerald-500/10 bg-emerald-500/5`}>
+              <h4 className="font-display font-bold text-base text-emerald-400 flex items-center gap-2">
+                <CheckCircle className="h-5 w-5" />
+                Strong Concept Pillars (Excellence)
+              </h4>
+              <ul className="mt-4 space-y-2 text-xs font-light text-slate-300">
+                <li className="flex justify-between items-center p-2 rounded bg-slate-950/20">
+                  <span>Carbon Ring Isomer & Benzene Structures</span>
+                  <span className="text-emerald-400 font-semibold font-mono">CHEM-303</span>
+                </li>
+                <li className="flex justify-between items-center p-2 rounded bg-slate-950/20">
+                  <span>Maxwell Electromagnetism Integration</span>
+                  <span className="text-emerald-400 font-semibold font-mono">PHYS-202</span>
+                </li>
+              </ul>
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* 3D Science Museum Tab */}
+      {activeTab === 'museum' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+          
+          <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+            <h3 className="font-display font-extrabold text-base mb-2 text-brand-cyan">🌌 Physics Gravity Sandbox</h3>
+            <PhysicsSandbox theme={theme} />
+          </div>
+
+          <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+            <h3 className="font-display font-extrabold text-base mb-2 text-brand-purple">🧪 Chemistry Atom Beaker</h3>
+            <ChemistrySandbox theme={theme} />
+          </div>
+
+          <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+            <h3 className="font-display font-extrabold text-base mb-2 text-brand-pink">🧬 Biology DNA & Firing Neurons</h3>
+            <BiologySandbox theme={theme} />
+          </div>
+
+          <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+            <h3 className="font-display font-extrabold text-base mb-2 text-yellow-400">📐 Math 3D rotating cubes</h3>
+            <MathSandbox theme={theme} />
+          </div>
+
+          <div className={`p-6 rounded-3xl border md:col-span-2 ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+            <h3 className="font-display font-extrabold text-base mb-2 text-indigo-400">📚 English Flying Letters sandbox</h3>
+            <EnglishSandbox theme={theme} />
+          </div>
+
+        </div>
+      )}
+
+      {/* Achievements and Certificates Tab */}
+      {activeTab === 'achievements' && (
+        <div className="space-y-6 text-left">
+          
+          {/* Printable Certificates checklist */}
+          <div className={`p-6 rounded-3xl border ${
+            theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+          }`}>
+            <h3 className="font-display font-extrabold text-lg mb-4">Official Performance Certificates</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {certificates.map((cert) => (
+                <div key={cert.id} className="p-4 rounded-2xl border border-white/5 bg-slate-900/30 flex justify-between items-center hover:border-brand-purple/20 transition-all">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-brand-purple to-brand-cyan flex items-center justify-center text-white">
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm">{cert.certificate_type} Certificate</h4>
+                      <p className="text-[10px] text-slate-400 mt-1">Issued: {new Date(cert.issued_at).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDownloadCertificate(cert)}
+                    className="p-2.5 rounded-xl bg-slate-950 border border-white/10 hover:bg-slate-800 text-xs font-bold text-white flex items-center gap-1.5"
+                  >
+                    <Download className="h-4 w-4 text-brand-cyan" />
+                    PDF
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Badges detailing */}
+          <div className={`p-6 rounded-3xl border ${
+            theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
+          }`}>
+            <h3 className="font-display font-extrabold text-lg mb-4">Milestone Badges Library</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              
+              <div className="p-4 rounded-2xl border border-white/5 bg-slate-900/20 text-center space-y-2 hover:rotate-2 transition-transform cursor-pointer">
+                <div className="text-3xl animate-bounce">🔥</div>
+                <h4 className="text-xs font-bold text-brand-pink">Fast Submission</h4>
+                <p className="text-[9px] text-slate-500 font-light">Turn in answers 24 hours before deadlines.</p>
+              </div>
+
+              <div className="p-4 rounded-2xl border border-white/5 bg-slate-900/20 text-center space-y-2 hover:-rotate-2 transition-transform cursor-pointer">
+                <div className="text-3xl animate-bounce">🌟</div>
+                <h4 className="text-xs font-bold text-yellow-400">Consistent Performer</h4>
+                <p className="text-[9px] text-slate-500 font-light">Hold an average above 85% for 3 months.</p>
+              </div>
+
+              <div className="p-4 rounded-2xl border border-white/5 bg-slate-900/20 text-center space-y-2 hover:rotate-2 transition-transform cursor-pointer">
+                <div className="text-3xl animate-bounce">🧪</div>
+                <h4 className="text-xs font-bold text-brand-cyan">Subject Expert</h4>
+                <p className="text-[9px] text-slate-500 font-light">Unlock A grades across 3 sciences tests.</p>
+              </div>
+
+              <div className="p-4 rounded-2xl border border-white/5 bg-slate-900/20 text-center space-y-2 hover:-rotate-2 transition-transform cursor-pointer">
+                <div className="text-3xl animate-bounce">🏆</div>
+                <h4 className="text-xs font-bold text-brand-purple">Top Scorer</h4>
+                <p className="text-[9px] text-slate-500 font-light">Achieve a perfect 95%+ score on midterms.</p>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* Answer Upload Overlay Modal */}
+      {selectedTestToSubmit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          {proctoringLocked ? (
+            /* LOCKED ENVIRONMENT */
+            <div className={`w-full max-w-md p-8 rounded-3xl border relative text-center ${
+              theme === 'dark' ? 'bg-slate-950 border-rose-500/30 text-white' : 'bg-white border-rose-500/20 text-slate-900'
+            }`}>
+              <div className="h-16 w-16 mx-auto rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 mb-6 animate-pulse">
+                <AlertTriangle className="h-8 w-8" />
+              </div>
+              <h3 className="font-display font-extrabold text-lg text-rose-500">EXAM PORTAL LOCKED</h3>
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                Your session for <strong>{selectedTestToSubmit.title}</strong> has been locked due to 3 or more proctoring security violations (switching browser tabs or exiting full screen).
+              </p>
+              <div className="mt-6 p-4 rounded-2xl bg-rose-500/5 border border-rose-500/10 text-[11px] text-slate-300 font-mono text-left space-y-1">
+                <p>• Status: LOCKED BY POLICY</p>
+                <p>• Security Violations: {proctoringViolations}</p>
+                <p>• Action: Report Logged & Dispatched to Instructor</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTestToSubmit(null);
+                  setIsProctoringActive(false);
+                  setProctoringViolations(0);
+                  setProctoringLocked(false);
+                }}
+                className="mt-6 w-full py-3.5 font-bold text-white bg-slate-900 border border-white/10 rounded-xl hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                Close & Return
+              </button>
+            </div>
+          ) : !isProctoringActive ? (
+            /* PROCTORING SHIELD ONBOARDING WARNING */
+            <div className={`w-full max-w-md p-8 rounded-3xl border relative text-left ${
+              theme === 'dark' ? 'bg-slate-950 border-white/10 text-white' : 'bg-white border-black/10 text-slate-900'
+            }`}>
+              <button 
+                onClick={() => {
+                  setSelectedTestToSubmit(null);
+                  setUploadProgress(null);
+                  setUploadError(null);
+                  setIsUploading(false);
+                }}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+              <div className="h-12 w-12 rounded-2xl bg-brand-cyan/15 border border-brand-cyan/30 flex items-center justify-center text-brand-cyan mb-4 animate-bounce">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+              <h3 className="font-display font-extrabold text-lg text-white">Secure Proctoring Portal</h3>
+              <p className="text-xs text-slate-400 mt-1">Academic Integrity Shield is required to submit: <strong>{selectedTestToSubmit.title}</strong></p>
+
+              <div className="mt-6 space-y-3.5 text-xs text-slate-300 leading-relaxed font-light">
+                <p>By entering, you agree to the following security protocols:</p>
+                <ul className="space-y-2 text-slate-400 pl-1">
+                  <li className="flex items-start gap-2">
+                    <span className="text-brand-cyan font-bold">•</span>
+                    <span><strong>Fullscreen Mode Enabled</strong>: Exiting fullscreen triggers a violation.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-brand-cyan font-bold">•</span>
+                    <span><strong>No Tab/App Switching</strong>: Navigating away from this tab triggers a violation.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-brand-cyan font-bold">•</span>
+                    <span><strong>Clipboard Blocked</strong>: Copy, cut, and paste shortcuts are disabled.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-brand-cyan font-bold">•</span>
+                    <span><strong>Right-Click Blocked</strong>: Context menu is disabled.</span>
+                  </li>
+                </ul>
+                <p className="text-[11px] text-amber-500 font-medium">⚠️ Exceeding 2 violations locks your exam and flags your student profile.</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsProctoringActive(true)}
+                className="mt-6 w-full py-3.5 font-bold text-white bg-gradient-to-r from-brand-purple to-brand-cyan rounded-xl shadow-lg hover:shadow-cyan-500/20 hover:scale-102 transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <ShieldCheck className="h-4.5 w-4.5" /> Start Exam Submission
+              </button>
+            </div>
+          ) : (
+            /* ACTIVE PROCTORING UPLOAD FORM */
+            <div className={`w-full max-w-md p-6 rounded-3xl border relative ${
+              theme === 'dark' ? 'bg-slate-950 border-white/10 text-white' : 'bg-white border-black/10 text-slate-900'
+            }`}>
+              <button 
+                onClick={() => {
+                  setSelectedTestToSubmit(null);
+                  setUploadProgress(null);
+                  setUploadError(null);
+                  setIsUploading(false);
+                  setIsProctoringActive(false);
+                  setProctoringViolations(0);
+                  if (document.fullscreenElement) {
+                    document.exitFullscreen().catch(err => {
+                      console.warn("Fullscreen exit failed:", err);
+                    });
+                  }
+                }}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
+                disabled={isUploading}
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+              {/* Secure Active Header Banner */}
+              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-between text-rose-400 mb-5 animate-pulse">
+                <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4 text-rose-500" />
+                  PROCTORING ACTIVE
+                </span>
+                <span className="text-[10px] font-mono font-bold">VIOLATIONS: {proctoringViolations}/3</span>
+              </div>
+
+              <h3 className="font-display font-extrabold text-lg flex items-center gap-1.5 text-brand-purple">
+                <Upload className="h-5 w-5 text-brand-cyan" />
+                Upload Answer Sheet
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">Submit solved sheet for: {selectedTestToSubmit.title}</p>
+
+              {uploadStatus && (
+                <div className={`mt-4 p-3 rounded-xl text-xs font-medium border ${
+                  uploadError 
+                    ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                    : 'bg-brand-purple/10 border-brand-purple/20 text-brand-purple'
+                }`}>
+                  {uploadStatus}
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="mt-2 text-xs text-rose-500 font-semibold leading-relaxed">
+                  {uploadError}
+                </div>
+              )}
+
+              <form onSubmit={handleAnswerSubmit} className="mt-6 space-y-4">
+                {/* File Type Selection */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Select File Type</label>
+                  <div className="flex gap-2">
+                    {['pdf', 'jpg', 'png'].map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        disabled={isUploading}
+                        onClick={() => setUploadFileType(type)}
+                        className={`flex-1 py-2 text-xs font-bold rounded-lg border uppercase transition-all cursor-pointer ${
+                          uploadFileType === type
+                            ? 'border-brand-cyan bg-brand-cyan/20 text-white'
+                            : 'border-white/5 bg-slate-900 text-slate-400'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Drag or Browse Zone */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Drag or Browse File</label>
+                  <input
+                    type="file"
+                    required
+                    disabled={isUploading}
+                    onChange={(e) => setUploadFile(e.target.files[0])}
+                    accept={uploadFileType === 'pdf' ? '.pdf' : '.jpg,.jpeg,.png'}
+                    className={`w-full py-4 px-4 text-xs rounded-xl border border-dashed border-slate-700 bg-slate-950/40 text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-brand-cyan file:cursor-pointer`}
+                  />
+                </div>
+
+                {/* Simulation Toggle */}
+                <div className="flex items-center gap-2 py-2">
+                  <input
+                    id="sim-drop"
+                    type="checkbox"
+                    checked={simulateNetworkDrop}
+                    disabled={isUploading}
+                    onChange={(e) => setSimulateNetworkDrop(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-900 text-brand-purple focus:ring-brand-purple"
+                  />
+                  <label htmlFor="sim-drop" className="text-xs text-slate-400 select-none cursor-pointer">
+                    Simulate connection drop failure at 60%
+                  </label>
+                </div>
+
+                {/* Real-time Progress Bar */}
+                {uploadProgress !== null && (
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[10px] uppercase font-bold text-slate-400">
+                      <span>Progress</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-brand-purple to-brand-cyan transition-all duration-150"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions Button */}
+                {uploadError ? (
+                  <button
+                    type="button"
+                    onClick={() => handleAnswerSubmit()}
+                    className="w-full py-3.5 font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600 rounded-xl shadow-lg hover:shadow-orange-500/10 hover:scale-102 active:scale-98 transition-all cursor-pointer"
+                  >
+                    Retry Upload
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={isUploading}
+                    className="w-full py-3.5 font-bold text-white bg-gradient-to-r from-brand-purple to-brand-cyan rounded-xl shadow-lg hover:shadow-cyan-500/10 transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {isUploading ? 'Uploading solved sheet...' : 'Upload Sheet'}
+                  </button>
+                )}
+              </form>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Result Vault Box Reveal Modal */}
+      {selectedResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-xl p-8 rounded-3xl border relative max-h-[85vh] overflow-y-auto ${
+            theme === 'dark' ? 'bg-slate-950 border-white/10 text-white' : 'bg-white border-black/10 text-slate-900'
+          }`}>
+            <button 
+              onClick={() => {
+                setSelectedResult(null);
+                setVaultOpened(false);
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            {!vaultOpened ? (
+              /* Locked Vault Box render */
+              <div className="py-12 text-center space-y-6 flex flex-col items-center">
+                <div className="relative h-28 w-28 rounded-full border-4 border-yellow-500/50 flex items-center justify-center bg-yellow-500/10 shadow-2xl animate-pulse">
+                  <span className="text-5xl">🔒</span>
+                  <div className="absolute inset-0 border border-dashed border-yellow-300 rounded-full animate-spin" style={{ animationDuration: '6s' }} />
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className="font-display font-extrabold text-xl text-yellow-400 uppercase tracking-widest">
+                    Locked Assessment Vault
+                  </h3>
+                  <p className="text-xs text-slate-400 font-light max-w-xs mx-auto leading-relaxed">
+                    This lockbox contains your official grade certificate, teacher comments, and AI conceptual recommendations.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setVaultOpened(true);
+                    confetti({ particleCount: 60, spread: 50 });
+                  }}
+                  className="px-8 py-3.5 font-bold text-white bg-gradient-to-r from-yellow-500 to-amber-600 rounded-xl shadow-lg hover:shadow-yellow-500/10 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                >
+                  🚀 Break Vault & Reveal Marks
+                </button>
+              </div>
+            ) : (
+              /* Graded report details card with count-up */
+              <>
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                    <Award className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-extrabold text-xl">{selectedResult.test.title}</h3>
+                    <span className="text-[10px] uppercase font-bold text-brand-purple tracking-wide">{selectedResult.test.subject}</span>
+                  </div>
+                </div>
+
+                {/* Scorecard Widget Grid with countup marks */}
+                <div className="grid grid-cols-3 gap-3 mt-6">
+                  <div className="p-4 rounded-2xl bg-slate-900/60 text-center border border-white/5">
+                    <span className="block text-[9px] uppercase tracking-wider text-slate-500">Marks Obtained</span>
+                    <span className="text-xl font-extrabold text-brand-cyan">{countUpMarks}</span>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">/ {selectedResult.test.total_marks}</span>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-900/60 text-center border border-white/5">
+                    <span className="block text-[9px] uppercase tracking-wider text-slate-500">Percentage</span>
+                    <span className="text-xl font-extrabold text-brand-cyan">
+                      {Math.round((countUpMarks / selectedResult.test.total_marks) * 100)}%
+                    </span>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-900/60 text-center border border-white/5">
+                    <span className="block text-[9px] uppercase tracking-wider text-slate-500">Grade Letter</span>
+                    <span className="text-xl font-extrabold text-emerald-400 font-display">{selectedResult.result.grade}</span>
+                  </div>
+                </div>
+
+                {/* Teacher feedback remarks */}
+                <div className="mt-6 text-left">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Teacher Evaluation Remarks</h4>
+                  <p className="mt-2 text-sm italic bg-slate-900/40 p-4 rounded-xl border border-white/5 text-slate-300">
+                    " {selectedResult.result.feedback || 'Outstanding reasoning in formulas.'} "
+                  </p>
+                </div>
+
+                {/* AI Diagnostics */}
+                {selectedResult.result.ai_feedback && (
+                  <div className="mt-6 text-left space-y-4">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-brand-purple flex items-center gap-1.5">
+                      <Sparkles className="h-4 w-4 text-brand-cyan animate-pulse" />
+                      AI Performance Diagnostic & Feedback
+                    </h4>
+                    
+                    {/* Simulated OCR Scanner Specs */}
+                    <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-900/40 border border-white/5 text-[10px]">
+                      <div>
+                        <span className="text-slate-500">OCR Scan Confidence:</span>
+                        <strong className="block text-brand-cyan font-mono mt-0.5">{selectedResult.result.ai_feedback.ocr_confidence || '95.2%'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Syllabus Match Similarity:</span>
+                        <strong className="block text-brand-cyan font-mono mt-0.5">{selectedResult.result.ai_feedback.comparison_matched || '88%'}</strong>
+                      </div>
+                    </div>
+
+                    {/* Gemini Feedback Text */}
+                    {selectedResult.result.ai_feedback.studentFeedback && (
+                      <div className="p-4 rounded-xl border border-brand-cyan/20 bg-brand-cyan/5 space-y-1">
+                        <span className="text-[10px] font-bold text-brand-cyan uppercase tracking-wider block">Diagnostic Summary</span>
+                        <p className="text-xs text-slate-300 leading-relaxed font-light">
+                          {selectedResult.result.ai_feedback.studentFeedback}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Strengths & Weak Areas Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Strengths */}
+                      {selectedResult.result.ai_feedback.strengths && (
+                        <div className="p-3.5 rounded-xl border border-emerald-500/10 bg-emerald-500/5">
+                          <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block mb-2">Strengths</span>
+                          <ul className="space-y-1 text-[10px] list-disc list-inside text-slate-350 leading-relaxed font-light">
+                            {selectedResult.result.ai_feedback.strengths.map((s, i) => (
+                              <li key={i}>{s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {/* Weak Areas */}
+                      {selectedResult.result.ai_feedback.weakAreas && (
+                        <div className="p-3.5 rounded-xl border border-brand-pink/10 bg-brand-pink/5">
+                          <span className="text-[9px] font-bold text-brand-pink uppercase tracking-wider block mb-2">Areas of Focus</span>
+                          <ul className="space-y-1 text-[10px] list-disc list-inside text-slate-355 leading-relaxed font-light">
+                            {selectedResult.result.ai_feedback.weakAreas.map((w, i) => (
+                              <li key={i}>{w}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Revision Plan */}
+                    {selectedResult.result.ai_feedback.revisionPlan && (
+                      <div className="p-4 rounded-xl border border-brand-purple/20 bg-brand-purple/5 space-y-1">
+                        <span className="text-[10px] font-bold text-brand-purple uppercase tracking-wider block">7-Day Study Revision Plan</span>
+                        <p className="text-xs text-slate-300 leading-relaxed font-light">
+                          {selectedResult.result.ai_feedback.revisionPlan}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Motivation Message */}
+                    {selectedResult.result.ai_feedback.motivationMessage && (
+                      <div className="p-3 text-center rounded-xl bg-gradient-to-r from-brand-purple/10 to-brand-cyan/10 border border-white/5 text-[10px] text-brand-cyan font-semibold">
+                        ✨ "{selectedResult.result.ai_feedback.motivationMessage}"
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-8 flex gap-3">
+                  <button
+                    onClick={() => handlePrintReportCard(selectedResult.result, selectedResult.test)}
+                    className="flex-1 py-3 text-center text-xs font-bold text-white bg-brand-cyan hover:bg-brand-cyan/80 rounded-xl"
+                  >
+                    Download PDF Report Card
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedResult(null);
+                      setVaultOpened(false);
+                    }}
+                    className="px-6 py-3 text-center text-xs font-bold text-slate-300 bg-slate-900 border border-white/10 rounded-xl hover:bg-slate-800"
+                  >
+                    Close View
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+const X = ({ className }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+  </svg>
+);
+
+export default StudentDashboard;

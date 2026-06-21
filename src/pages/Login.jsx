@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../database/supabaseClient';
 import { 
   GraduationCap, ArrowRight, ShieldCheck, Mail, Lock, Sparkles, User, 
-  AlertCircle, Sun, Moon, Zap, ZapOff, UserPlus, BookOpen, Key 
+  AlertCircle, Sun, Moon, Zap, ZapOff, UserPlus, BookOpen, Key,
+  Eye, EyeOff
 } from 'lucide-react';
 import { ThreeBackground } from '../components/ThreeBackground';
 import { LoginVault } from '../components/LoginVault';
@@ -24,6 +25,7 @@ export const Login = () => {
   // Input fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
   const [regNumber, setRegNumber] = useState('');
 
@@ -317,16 +319,23 @@ export const Login = () => {
                 <div className="relative">
                   <Lock className="absolute left-4 top-3.5 h-4 w-4 text-slate-500" />
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     required
                     minLength={6}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className={`w-full py-3.5 pl-11 pr-4 text-sm font-light rounded-xl ${
+                    className={`w-full py-3.5 pl-11 pr-12 text-sm font-light rounded-xl ${
                       theme === 'dark' ? 'glass-input-dark' : 'glass-input-light'
                     }`}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-3 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
 
@@ -461,15 +470,22 @@ export const Login = () => {
                     <div className="relative">
                       <Lock className="absolute left-4 top-3.5 h-4 w-4 text-slate-500" />
                       <input
-                        type="password"
+                        type={showPassword ? 'text' : 'password'}
                         required
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
-                        className={`w-full py-3.5 pl-11 pr-4 text-sm font-light rounded-xl ${
+                        className={`w-full py-3.5 pl-11 pr-12 text-sm font-light rounded-xl ${
                           theme === 'dark' ? 'glass-input-dark' : 'glass-input-light'
                         }`}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-3 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
                     </div>
                   </div>
                 </>

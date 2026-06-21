@@ -11,7 +11,7 @@ import {
   LayoutDashboard, Plus, BookOpen, FileText, ClipboardList, CheckCircle2,
   Users, BarChart2, Settings, Menu, X, Upload, Calendar, Clock, Trash2,
   Edit, Download, Search, Sparkles, ChevronRight, Award, Eye, AlertTriangle,
-  RefreshCw, CheckSquare
+  RefreshCw, CheckSquare, LogOut
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -45,7 +45,7 @@ const gradeLabel = (pct) => {
 
 export const TeacherDashboard = () => {
   const navigate = useNavigate();
-  const { user, teacher, theme } = useAuth();
+  const { user, teacher, logout, theme } = useAuth();
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -371,6 +371,16 @@ export const TeacherDashboard = () => {
             );
           })}
         </nav>
+        {/* Sidebar logout */}
+        <div className={`p-4 border-t ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
+          <button
+            onClick={logout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all text-red-500 hover:bg-red-500/10 cursor-pointer"
+          >
+            <LogOut className="h-4 w-4 shrink-0 text-red-500" />
+            Sign Out
+          </button>
+        </div>
       </aside>
 
       {/* ── MAIN CONTENT ──────────────────────────────────────────────────── */}
@@ -402,6 +412,16 @@ export const TeacherDashboard = () => {
               alt="avatar"
               className="h-9 w-9 rounded-xl border border-white/10"
             />
+            <button
+              onClick={logout}
+              className={`p-2.5 rounded-xl border transition-all duration-300 cursor-pointer hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-500 flex items-center justify-center ${
+                theme === 'dark' ? 'border-white/10 text-slate-400' : 'border-slate-200 text-slate-600'
+              }`}
+              title="Sign Out"
+              aria-label="Sign Out"
+            >
+              <LogOut className="h-4.5 w-4.5" />
+            </button>
           </div>
         </div>
 

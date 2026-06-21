@@ -81,6 +81,28 @@ export const AuthProvider = ({ children }) => {
           const { data: t } = await supabase.from('teachers').select('*').eq('id', profile.id).single();
           setTeacher(t);
         }
+      } else {
+        // Auto-provision Google OAuth user as student
+        const newProfile = {
+          id: authUser.id,
+          name: authUser.user_metadata?.full_name || authUser.email.split('@')[0],
+          email: authUser.email,
+          role: 'student',
+          avatar_url: authUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(authUser.email)}`
+        };
+        await supabase.from('users').insert(newProfile);
+        
+        const reg = `REG-2026-${Math.floor(100 + Math.random() * 900)}`;
+        const newStudent = {
+          id: authUser.id,
+          registration_number: reg,
+          class_name: 'Grade 10-A',
+          parent_email: ''
+        };
+        await supabase.from('students').insert(newStudent);
+        
+        setUser(newProfile);
+        setStudent(newStudent);
       }
     } catch (err) {
       console.error("Error fetching profile from Supabase:", err);
@@ -223,8 +245,102 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loginWithGoogle = async (role = 'student') => {
+    setLoading(true);
+    try {
+      if (isLiveMode && supabase) {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: window.location.origin
+          }
+        });
+        if (error) throw error;
+        setLoading(false);
+        return { error: null };
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        const suffix = role === 'teacher' ? 'teacher' : 'student';
+        const email = `google.${suffix}@gmail.com`;
+        const name = `Google ${suffix === 'teacher' ? 'Teacher/Admin' : 'Student'}`;
+        
+        const db = JSON.parse(localStorage.getItem('edutrack_mock_db')) || { users: [], students: [], teachers: [] };
+        let user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+        
+        if (!user) {
+          const signupRes = await mockDb.signup(name, email, role, {
+            className: 'Grade 10-A',
+            department: 'Science & Mathematics'
+          });
+          if (signupRes.error) throw new Error(signupRes.error);
+          user = signupRes.data.user;
+        }
+        
+        const loginRes = await mockDb.login(email, '', null);
+        if (loginRes.error) throw new Error(loginRes.error);
+        
+        setUser(loginRes.data.user);
+        setStudent(loginRes.data.student);
+        setTeacher(loginRes.data.teacher);
+        localStorage.setItem('edutrack_auth_user', JSON.stringify(loginRes.data));
+        
+        setLoading(false);
+        return { error: null };
+      }
+    } catch (err) {
+      setLoading(false);
+      return { error: err.message };
+    }
+  };
+
+  const sendOtp = async (email) => {
+    try {
+      if (isLiveMode && supabase) {
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            shouldCreateUser: false
+          }
+        });
+        if (error) throw error;
+        return { data: 'live', error: null };
+      } else {
+        const { data, error } = await mockDb.sendOtpForRecovery(email);
+        if (error) throw new Error(error);
+        return { data, error: null };
+      }
+    } catch (err) {
+      return { data: null, error: err.message };
+    }
+  };
+
+  const verifyOtpAndReset = async (email, otp, newPassword) => {
+    try {
+      if (isLiveMode && supabase) {
+        const { error: verifyErr } = await supabase.auth.verifyOtp({
+          email,
+          token: otp,
+          type: 'email'
+        });
+        if (verifyErr) throw verifyErr;
+
+        const { error: updateErr } = await supabase.auth.updateUser({ password: newPassword });
+        if (updateErr) throw updateErr;
+
+        return { error: null };
+      } else {
+        const { error } = await mockDb.verifyAndResetPassword(email, otp, newPassword);
+        if (error) throw new Error(error);
+        return { error: null };
+      }
+    } catch (err) {
+      return { error: err.message };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, student, parent, teacher, loading, theme, reducedMotion, login, signup, logout, toggleTheme, toggleReducedMotion, refreshUserData, isLiveMode }}>
+    <AuthContext.Provider value={{ user, student, parent, teacher, loading, theme, reducedMotion, login, signup, logout, toggleTheme, toggleReducedMotion, refreshUserData, isLiveMode, loginWithGoogle, sendOtp, verifyOtpAndReset }}>
       {children}
     </AuthContext.Provider>
   );

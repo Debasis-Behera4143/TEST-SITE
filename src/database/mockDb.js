@@ -42,6 +42,48 @@ const delay = (ms = 400) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const mockDb = {
   // --- AUTH/USERS ---
+  async sendOtpForRecovery(email) {
+    await delay();
+    const db = getDb();
+    const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (!user) {
+      return { data: null, error: "Email address not found in school records." };
+    }
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    localStorage.setItem("edutrack_recovery_otp", JSON.stringify({
+      email: email.toLowerCase(),
+      otp,
+      expiresAt: Date.now() + 10 * 60 * 1000
+    }));
+    return { data: otp, error: null };
+  },
+
+  async verifyAndResetPassword(email, otp, newPassword) {
+    await delay();
+    const cached = localStorage.getItem("edutrack_recovery_otp");
+    if (!cached) return { error: "No active reset request. Please request OTP again." };
+    
+    const { email: cachedEmail, otp: cachedOtp, expiresAt } = JSON.parse(cached);
+    if (Date.now() > expiresAt) {
+      localStorage.removeItem("edutrack_recovery_otp");
+      return { error: "OTP has expired. Please request a new one." };
+    }
+    
+    if (cachedEmail !== email.toLowerCase() || cachedOtp !== otp) {
+      return { error: "Invalid OTP verification code." };
+    }
+    
+    const db = getDb();
+    const userIndex = db.users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+    if (userIndex !== -1) {
+      db.users[userIndex].password = newPassword;
+      saveDb(db);
+    }
+    
+    localStorage.removeItem("edutrack_recovery_otp");
+    return { error: null };
+  },
+
   async login(email, password, regNumber = null) {
     // Note: AuthContext handles Supabase Auth directly. This helper is for local mode.
     await delay();

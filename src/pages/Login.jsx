@@ -13,7 +13,7 @@ import { LoginVault } from '../components/LoginVault';
 export const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login, signup, theme, toggleTheme, reducedMotion, toggleReducedMotion, user, isLiveMode } = useAuth() || {};
+  const { login, signup, theme, toggleTheme, reducedMotion, toggleReducedMotion, user, isLiveMode, loginWithGoogle, sendOtp, verifyOtpAndReset } = useAuth() || {};
 
   // Form Mode: login | signup | forgot
   const [isSignUp, setIsSignUp] = useState(false);
@@ -26,6 +26,9 @@ export const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [mockOtpToShow, setMockOtpToShow] = useState('');
   const [name, setName] = useState('');
   const [regNumber, setRegNumber] = useState('');
 
@@ -53,32 +56,57 @@ export const Login = () => {
     }
   }, [user, navigate, showVault]);
 
-  // Handle Login or Password Reset
-  const handleSubmit = async (e) => {
+  // Handle Forgot Password OTP Flow
+  const handleForgotSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setMessage('');
     setSubmitting(true);
 
-    if (isForgot) {
-      // Forgot Password simulation or Supabase call
-      try {
-        if (isLiveMode && supabase) {
-          const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/reset-password`,
-          });
-          if (resetErr) throw resetErr;
+    try {
+      if (!otpSent) {
+        // Step 1: Send OTP
+        const { data, error: sendErr } = await sendOtp(email);
+        if (sendErr) throw new Error(sendErr);
+
+        if (!isLiveMode && data) {
+          setMockOtpToShow(data);
+          setMessage(`[Mock Mode]: Google OTP generated successfully: ${data}`);
+        } else {
+          setMessage("Google OTP code has been dispatched to your registered email address.");
         }
-        setMessage("Password reset instructions have been dispatched to your email address.");
+        setOtpSent(true);
+      } else {
+        // Step 2: Verify & Reset
+        const { error: resetErr } = await verifyOtpAndReset(email, otpCode, password);
+        if (resetErr) throw new Error(resetErr);
+
+        setMessage("Password has been successfully updated. You may now log in.");
         setIsForgot(false);
-      } catch (err) {
-        setError(err.message || "Failed to trigger password reset.");
-      } finally {
-        setSubmitting(false);
+        setOtpSent(false);
+        setMockOtpToShow('');
+        setOtpCode('');
+        setPassword('');
       }
+    } catch (err) {
+      setError(err.message || "Failed to process recovery request.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle Login or Password Reset
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+
+    if (isForgot) {
+      await handleForgotSubmit(e);
       return;
     }
 
+    setSubmitting(true);
     const { error: loginErr } = await login(
       activeTab === 'credentials' ? email : '',
       activeTab === 'credentials' ? password : '',
@@ -124,22 +152,20 @@ export const Login = () => {
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = async (role = 'student') => {
     setError('');
-    if (isLiveMode && supabase) {
-      setSubmitting(true);
-      const { error: oAuthErr } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin
-        }
-      });
-      if (oAuthErr) {
-        setError(oAuthErr.message);
-        setSubmitting(false);
-      }
+    setMessage('');
+    setSubmitting(true);
+    const { error: oAuthErr } = await loginWithGoogle(role);
+    setSubmitting(false);
+    if (oAuthErr) {
+      setError(oAuthErr);
     } else {
-      setError("Google Login is only available with a live Supabase backend. Please register a local account.");
+      if (!isLiveMode) {
+        const targetRole = role === 'teacher' ? 'teacher' : 'student';
+        setVaultRedirectUrl(`/${targetRole}-dashboard`);
+        setShowVault(true);
+      }
     }
   };
 
@@ -273,6 +299,13 @@ export const Login = () => {
             <div className="mt-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 shrink-0" />
               <span>{message}</span>
+            </div>
+          )}
+          {mockOtpToShow && (
+            <div className="mt-4 p-4 rounded-xl bg-brand-purple/10 border border-brand-purple/30 text-brand-purple text-xs flex flex-col gap-1.5 animate-bounce">
+              <span className="font-extrabold uppercase tracking-wider text-brand-cyan">🔑 [Developer Sandbox OTP]</span>
+              <p>Your simulated 6-digit Google OTP is: <strong className="text-white text-sm font-mono tracking-widest">{mockOtpToShow}</strong></p>
+              <p className="text-[10px] text-slate-400">Enter this code below along with your new password to verify and reset.</p>
             </div>
           )}
 
@@ -421,22 +454,72 @@ export const Login = () => {
             /* SIGN IN OR FORGOT PASSWORD FORM */
             <form onSubmit={handleSubmit} className="mt-6 space-y-4 text-left">
               {isForgot ? (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Email Address</label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-3.5 h-4 w-4 text-slate-500" />
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="name@academy.com"
-                      className={`w-full py-3.5 pl-11 pr-4 text-sm font-light rounded-xl ${
-                        theme === 'dark' ? 'glass-input-dark' : 'glass-input-light'
-                      }`}
-                    />
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Email Address</label>
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-3.5 h-4 w-4 text-slate-500" />
+                      <input
+                        type="email"
+                        required
+                        disabled={otpSent}
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="name@academy.com"
+                        className={`w-full py-3.5 pl-11 pr-4 text-sm font-light rounded-xl ${
+                          theme === 'dark' ? 'glass-input-dark' : 'glass-input-light'
+                        } ${otpSent ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      />
+                    </div>
                   </div>
-                </div>
+
+                  {otpSent && (
+                    <>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Enter 6-Digit OTP</label>
+                        <div className="relative">
+                          <Key className="absolute left-4 top-3.5 h-4 w-4 text-slate-500" />
+                          <input
+                            type="text"
+                            required
+                            maxLength={6}
+                            value={otpCode}
+                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                            placeholder="123456"
+                            className={`w-full py-3.5 pl-11 pr-4 text-sm font-semibold tracking-widest rounded-xl ${
+                              theme === 'dark' ? 'glass-input-dark' : 'glass-input-light'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-400">New Password</label>
+                        <div className="relative">
+                          <Lock className="absolute left-4 top-3.5 h-4 w-4 text-slate-500" />
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            required
+                            minLength={6}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="New Password"
+                            className={`w-full py-3.5 pl-11 pr-12 text-sm font-light rounded-xl ${
+                              theme === 'dark' ? 'glass-input-dark' : 'glass-input-light'
+                            }`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-4 top-3 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
+                          >
+                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </>
               ) : activeTab === 'credentials' ? (
                 <>
                   <div className="space-y-1.5">
@@ -538,14 +621,14 @@ export const Login = () => {
                 disabled={submitting}
                 className="w-full flex items-center justify-center gap-2 py-4 font-bold text-white bg-gradient-to-r from-brand-purple to-brand-cyan rounded-xl shadow-lg hover:shadow-cyan-500/10 transition-all duration-300 disabled:opacity-50 pt-1"
               >
-                {submitting ? 'Authenticating...' : isForgot ? 'Request Reset' : 'Sign In Now'}
+                {submitting ? 'Processing...' : isForgot ? (otpSent ? 'Verify & Reset Password' : 'Request Recovery OTP') : 'Sign In Now'}
                 {!submitting && <ArrowRight className="h-4 w-4" />}
               </button>
             </form>
           )}
 
           {/* Social Sign-In (Google OAuth Router) */}
-          {!isForgot && !isSignUp && (
+          {!isForgot && (
             <div className="mt-6 space-y-4">
               <div className="relative flex py-2 items-center">
                 <div className="flex-grow border-t border-white/5"></div>
@@ -555,7 +638,7 @@ export const Login = () => {
 
               <button
                 type="button"
-                onClick={handleGoogleLogin}
+                onClick={() => handleGoogleLogin(isSignUp ? signUpRole : 'student')}
                 className={`w-full flex items-center justify-center gap-3 py-3 font-semibold rounded-xl border text-sm transition-all cursor-pointer ${
                   theme === 'dark'
                     ? 'border-white/5 bg-slate-900 hover:bg-slate-950 text-white'
@@ -580,7 +663,7 @@ export const Login = () => {
                     d="M12 23c3.24 0 5.97-1.08 7.96-2.93l-3.6-2.8c-1.1.74-2.52 1.18-4.36 1.18-3.24 0-6.04-1.99-7.02-5.26l-3.6 2.8C3.39 20.35 7.35 23 12 23z"
                   />
                 </svg>
-                Sign In with Google
+                {isSignUp ? 'Sign Up with Google' : 'Sign In with Google'}
               </button>
             </div>
           )}

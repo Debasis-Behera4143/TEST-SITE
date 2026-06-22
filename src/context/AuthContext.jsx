@@ -40,6 +40,7 @@ export const AuthProvider = ({ children }) => {
 
   // Load active session
   useEffect(() => {
+    let authSubscription = null;
     const initSession = async () => {
       if (isLiveMode && supabase) {
         const { data: { session } } = await supabase.auth.getSession();
@@ -48,12 +49,31 @@ export const AuthProvider = ({ children }) => {
         } else {
           loadMockSession();
         }
+
+        // Listen to auth state changes dynamically (critical for OAuth redirects!)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+          if (session?.user) {
+            await fetchSupabaseProfile(session.user);
+          } else if (event === 'SIGNED_OUT') {
+            setUser(null);
+            setStudent(null);
+            setParent(null);
+            setTeacher(null);
+          }
+        });
+        authSubscription = subscription;
       } else {
         loadMockSession();
       }
       setLoading(false);
     };
     initSession();
+
+    return () => {
+      if (authSubscription) {
+        authSubscription.unsubscribe();
+      }
+    };
   }, []);
 
   const loadMockSession = () => {

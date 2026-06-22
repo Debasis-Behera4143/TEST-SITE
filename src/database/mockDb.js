@@ -751,16 +751,20 @@ export const mockDb = {
         throw error;
       }
 
-      return (data || []).map(l => ({
-        id: l.id,
-        student_id: l.student_id,
-        rank: l.rank,
-        monthly_score: parseFloat(l.monthly_score),
-        name: l.students?.users?.name || "Unknown Scholar",
-        avatar: l.students?.users?.avatar_url || "",
-        level: l.students?.level || 1,
-        xp: l.students?.xp || 0
-      }));
+      return (data || []).map(l => {
+        const student = Array.isArray(l.students) ? l.students[0] : l.students;
+        const sUser = student ? (Array.isArray(student.users) ? student.users[0] : student.users) : null;
+        return {
+          id: l.id,
+          student_id: l.student_id,
+          rank: l.rank,
+          monthly_score: parseFloat(l.monthly_score),
+          name: sUser?.name || "Unknown Scholar",
+          avatar: sUser?.avatar_url || "",
+          level: student?.level || 1,
+          xp: student?.xp || 0
+        };
+      });
     }
 
     await delay(150);
@@ -1389,17 +1393,20 @@ export const mockDb = {
         .select('id, name, email, avatar_url, created_at, students(registration_number, class_name, xp, level)')
         .eq('role', 'student');
       if (error) throw error;
-      return (data || []).map(u => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        avatar_url: u.avatar_url,
-        created_at: u.created_at,
-        registration_number: u.students?.registration_number,
-        class_name: u.students?.class_name,
-        xp: u.students?.xp,
-        level: u.students?.level
-      }));
+      return (data || []).map(u => {
+        const student = Array.isArray(u.students) ? u.students[0] : u.students;
+        return {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          avatar_url: u.avatar_url,
+          created_at: u.created_at,
+          registration_number: student?.registration_number,
+          class_name: student?.class_name,
+          xp: student?.xp,
+          level: student?.level
+        };
+      });
     }
     await delay(200);
     const db = getDb();

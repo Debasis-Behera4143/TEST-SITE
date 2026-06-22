@@ -231,9 +231,14 @@ export const EvaluationModule = () => {
   }
 
   const isEncrypted = submission.file_url && submission.file_url.startsWith('e2ee:');
-  const fileUrl = isEncrypted
-    ? decryptPayload(submission.file_url.slice(5))
-    : submission.file_url;
+  let fileUrl = submission.file_url;
+  try {
+    if (isEncrypted) {
+      fileUrl = decryptPayload(submission.file_url.slice(5));
+    }
+  } catch (err) {
+    console.error("EvaluationModule decryption failed:", err);
+  }
   const fileType = submission.file_type?.toLowerCase();
   const isPdf = fileType === 'pdf';
   const isImage = fileType === 'jpg' || fileType === 'png' || fileType === 'jpeg';

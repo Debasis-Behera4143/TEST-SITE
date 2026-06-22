@@ -106,6 +106,9 @@ export const StudentDashboard = () => {
 
         const { data: certList } = await supabase.from('certificates').select('*').eq('student_id', user.id);
         setCertificates(certList || []);
+
+        const notifs = await mockDb.getNotifications(user.id);
+        setNotifications(notifs || []);
       } else {
         // Mock DB fetch — only assigned tests for this student
         const tList = await mockDb.getAssignedTests(user.id);

@@ -7,13 +7,17 @@ import {
   AlertCircle, Sun, Moon, Zap, ZapOff, UserPlus, BookOpen, Key,
   Eye, EyeOff
 } from 'lucide-react';
-import { ThreeBackground } from '../components/ThreeBackground';
-import { LoginVault } from '../components/LoginVault';
+
 
 export const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login, signup, theme, toggleTheme, reducedMotion, toggleReducedMotion, user, isLiveMode, loginWithGoogle, sendOtp, verifyOtpAndReset } = useAuth() || {};
+  const { login, signup, theme, toggleTheme, reducedMotion, toggleReducedMotion, user, isLiveMode, loginWithGoogle, sendOtp, verifyOtpAndReset, logout, needsOnboarding, onboardingAuthUser, authError, completeGoogleOnboarding } = useAuth() || {};
+
+  // Onboarding states
+  const [onboardingRole, setOnboardingRole] = useState('student'); // 'student' | 'teacher'
+  const [onboardingClass, setOnboardingClass] = useState('Grade 10-A');
+  const [onboardingDept, setOnboardingDept] = useState('Science & Mathematics');
 
   // Form Mode: login | signup | forgot
   const [isSignUp, setIsSignUp] = useState(false);
@@ -116,13 +120,10 @@ export const Login = () => {
     setSubmitting(false);
     if (loginErr) {
       setError(loginErr);
-    } else {
-      // Trigger Vault Unlock!
       const targetRole = activeTab === 'regnumber' 
         ? 'student' 
         : (email.includes('teacher') || email.includes('admin') ? 'teacher' : 'student');
-      setVaultRedirectUrl(`/${targetRole}-dashboard`);
-      setShowVault(true);
+      navigate(`/${targetRole}-dashboard`);
     }
   };
 
@@ -146,9 +147,8 @@ export const Login = () => {
     if (signUpErr) {
       setError(signUpErr);
     } else {
-      setMessage("Registration successful! Unlocking vaults...");
-      setVaultRedirectUrl(`/${signUpRole}-dashboard`);
-      setShowVault(true);
+      setMessage("Registration successful!");
+      navigate(`/${signUpRole}-dashboard`);
     }
   };
 
@@ -162,12 +162,216 @@ export const Login = () => {
       setError(oAuthErr);
     } else {
       if (!isLiveMode) {
-        const targetRole = role === 'teacher' ? 'teacher' : 'student';
-        setVaultRedirectUrl(`/${targetRole}-dashboard`);
-        setShowVault(true);
+        // Mock mode oauth check will trigger needsOnboarding state automatically
       }
     }
   };
+
+  const handleOnboardingSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+    setSubmitting(true);
+
+    const extra = {};
+    if (onboardingRole === 'student') {
+      extra.className = onboardingClass;
+    } else {
+      extra.department = onboardingDept;
+    }
+
+    const { error: onboardingErr } = await completeGoogleOnboarding(onboardingRole, extra);
+    setSubmitting(false);
+    if (onboardingErr) {
+      setError(onboardingErr);
+    } else {
+      setMessage("Account setup complete!");
+    }
+  };
+
+  if (authError) {
+    return (
+      <div className="relative min-h-screen flex flex-col justify-between overflow-hidden">
+        <header className="relative z-10 w-full max-w-7xl mx-auto px-6 py-6 flex flex-row items-center justify-between">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+            <div className="p-2 rounded-xl bg-gradient-to-tr from-brand-purple to-brand-cyan text-white shadow-lg">
+              <GraduationCap className="h-6 w-6" />
+            </div>
+            <span className="font-display font-extrabold text-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 bg-clip-text text-transparent dark:from-white dark:via-slate-200 dark:to-slate-400">
+              EduTrack <span className="text-brand-cyan">AI</span>
+            </span>
+          </div>
+        </header>
+
+        <main className="relative z-10 flex-grow flex items-center justify-center px-6 py-12">
+          <div className={`w-full max-w-md p-8 rounded-3xl border text-center ${
+            theme === 'dark' ? 'glass-card-dark border-white/5 shadow-2xl' : 'glass-card-light border-black/5 shadow-xl'
+          }`}>
+            <AlertCircle className="h-12 w-12 text-brand-pink mx-auto mb-4 animate-bounce" />
+            <h3 className={`text-xl font-display font-extrabold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+              Account Setup Incomplete
+            </h3>
+            <p className={`mt-4 text-sm font-light leading-relaxed ${theme === 'dark' ? 'text-slate-400' : 'text-slate-650'}`}>
+              {authError}
+            </p>
+            <button
+              onClick={async () => {
+                await logout();
+                window.location.reload();
+              }}
+              className="w-full mt-6 py-3.5 bg-gradient-to-r from-brand-purple to-brand-cyan text-white font-bold rounded-xl shadow-lg transition-all cursor-pointer text-xs"
+            >
+              Back to Sign In Gate
+            </button>
+          </div>
+        </main>
+
+        <footer className="relative z-10 w-full border-t border-white/5 py-6 bg-slate-950/20 backdrop-blur-md">
+          <div className="max-w-7xl mx-auto px-6 flex justify-between items-center text-xs font-light text-slate-500">
+            <span>© 2026 EduTrack AI.</span>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
+  if (needsOnboarding) {
+    return (
+      <div className="relative min-h-screen flex flex-col justify-between overflow-hidden">
+        <header className="relative z-10 w-full max-w-7xl mx-auto px-6 py-6 flex flex-row items-center justify-between">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+            <div className="p-2 rounded-xl bg-gradient-to-tr from-brand-purple to-brand-cyan text-white shadow-lg">
+              <GraduationCap className="h-6 w-6" />
+            </div>
+            <span className="font-display font-extrabold text-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 bg-clip-text text-transparent dark:from-white dark:via-slate-200 dark:to-slate-400">
+              EduTrack <span className="text-brand-cyan">AI</span>
+            </span>
+          </div>
+        </header>
+
+        <main className="relative z-10 flex-grow flex items-center justify-center px-6 py-12">
+          <div className={`w-full max-w-md p-8 rounded-3xl border text-left ${
+            theme === 'dark' ? 'glass-card-dark border-white/5 shadow-2xl' : 'glass-card-light border-black/5 shadow-xl'
+          }`}>
+            <h3 className={`text-2xl font-display font-extrabold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+              Complete Your Account Setup
+            </h3>
+            <p className={`mt-2 text-xs font-light ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+              Choose your role to activate your Google profile.
+            </p>
+
+            {error && (
+              <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {message && (
+              <div className="mt-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 shrink-0" />
+                <span>{message}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleOnboardingSubmit} className="mt-6 space-y-4">
+              {/* Role Selection */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">Select Role</label>
+                <div className="flex gap-2 bg-slate-950/20 p-1 rounded-xl border border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => setOnboardingRole('student')}
+                    className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                      onboardingRole === 'student'
+                        ? 'bg-slate-800 text-white shadow-md'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    🎓 Student
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOnboardingRole('teacher')}
+                    className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                      onboardingRole === 'teacher'
+                        ? 'bg-slate-800 text-white shadow-md'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    👩‍🏫 Teacher / Admin
+                  </button>
+                </div>
+              </div>
+
+              {/* Conditional Onboarding Fields */}
+              {onboardingRole === 'student' ? (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Class/Grade *</label>
+                  <div className="relative">
+                    <BookOpen className="absolute left-4 top-3.5 h-4 w-4 text-slate-500" />
+                    <input
+                      type="text"
+                      required
+                      value={onboardingClass}
+                      onChange={(e) => setOnboardingClass(e.target.value)}
+                      placeholder="e.g. Grade 10-A"
+                      className={`w-full py-3.5 pl-11 pr-4 text-sm font-light rounded-xl ${
+                        theme === 'dark' ? 'glass-input-dark' : 'glass-input-light'
+                      }`}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Department Name *</label>
+                  <div className="relative">
+                    <BookOpen className="absolute left-4 top-3.5 h-4 w-4 text-slate-500" />
+                    <input
+                      type="text"
+                      required
+                      value={onboardingDept}
+                      onChange={(e) => setOnboardingDept(e.target.value)}
+                      placeholder="e.g. Science & Mathematics"
+                      className={`w-full py-3.5 pl-11 pr-4 text-sm font-light rounded-xl ${
+                        theme === 'dark' ? 'glass-input-dark' : 'glass-input-light'
+                      }`}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full flex items-center justify-center gap-2 py-4 font-bold text-white bg-gradient-to-r from-brand-purple to-brand-cyan rounded-xl shadow-lg hover:shadow-cyan-500/10 transition-all duration-300 disabled:opacity-50 mt-6 cursor-pointer"
+              >
+                {submitting ? 'Setting up account...' : 'Complete Profile Activation'}
+                {!submitting && <ArrowRight className="h-4 w-4" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await logout();
+                  window.location.reload();
+                }}
+                className="w-full py-2.5 text-center text-xs font-semibold text-slate-500 hover:text-slate-350 cursor-pointer"
+              >
+                Cancel Setup & Sign Out
+              </button>
+            </form>
+          </div>
+        </main>
+
+        <footer className="relative z-10 w-full border-t border-white/5 py-6 bg-slate-950/20 backdrop-blur-md">
+          <div className="max-w-7xl mx-auto px-6 flex justify-between items-center text-xs font-light text-slate-500">
+            <span>© 2026 EduTrack AI. Encrypted TLS Session.</span>
+          </div>
+        </footer>
+      </div>
+    );
+  }
 
   if (showVault) {
     return (
@@ -180,7 +384,6 @@ export const Login = () => {
 
   return (
     <div className="relative min-h-screen flex flex-col justify-between overflow-hidden">
-      <ThreeBackground active={true} />
 
       <header className="relative z-10 w-full max-w-7xl mx-auto px-6 py-6 flex flex-row items-center justify-between">
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setIsSignUp(false); setIsForgot(false); navigate('/'); }}>
@@ -594,27 +797,7 @@ export const Login = () => {
                 </div>
               )}
 
-              {!isForgot && (
-                <div className="space-y-1.5 pt-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block text-left">Select Unlock Animation</label>
-                  <div className="flex gap-1 bg-slate-950/40 p-1 rounded-xl border border-white/5">
-                    {['cricket', 'football', 'rocket', 'laser'].map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setSelectedAnimationMode(mode)}
-                        className={`flex-1 py-1.5 text-[9px] font-extrabold rounded-lg capitalize transition-all ${
-                          selectedAnimationMode === mode
-                            ? 'bg-slate-850 text-white shadow-sm border border-white/10'
-                            : 'text-slate-500 hover:text-slate-300'
-                        }`}
-                      >
-                        {mode === 'cricket' ? '🏏 Bat' : mode === 'football' ? '⚽ Kick' : mode === 'rocket' ? '🚀 Ship' : '⚡ Laser'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+
 
               <button
                 type="submit"

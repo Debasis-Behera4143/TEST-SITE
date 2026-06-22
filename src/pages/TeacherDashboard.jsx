@@ -11,7 +11,7 @@ import {
   LayoutDashboard, Plus, BookOpen, FileText, ClipboardList, CheckCircle2,
   Users, BarChart2, Settings, Menu, X, Upload, Calendar, Clock, Trash2,
   Edit, Download, Search, Sparkles, ChevronRight, Award, Eye, AlertTriangle,
-  RefreshCw, CheckSquare, LogOut
+  RefreshCw, CheckSquare, LogOut, EyeOff, ShieldCheck
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -45,7 +45,7 @@ const gradeLabel = (pct) => {
 
 export const TeacherDashboard = () => {
   const navigate = useNavigate();
-  const { user, teacher, logout, theme } = useAuth();
+  const { user, teacher, logout, theme, registerStudentByTeacher } = useAuth();
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -98,6 +98,61 @@ export const TeacherDashboard = () => {
   });
   const [qFormLoading, setQFormLoading] = useState(false);
   const [qFormMsg, setQFormMsg] = useState('');
+
+  // Student registration states
+  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [studentForm, setStudentForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    className: 'Grade 10-A',
+    parentEmail: ''
+  });
+  const [studentFormLoading, setStudentFormLoading] = useState(false);
+  const [studentFormError, setStudentFormError] = useState('');
+  const [studentFormSuccess, setStudentFormSuccess] = useState(null);
+  const [showStudentPassword, setShowStudentPassword] = useState(false);
+
+  const generateRandomPassword = () => {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    let pass = '';
+    for (let i = 0; i < 10; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setStudentForm(f => ({ ...f, password: pass }));
+  };
+
+  const handleRegisterStudentSubmit = async (e) => {
+    e.preventDefault();
+    setStudentFormError('');
+    setStudentFormSuccess(null);
+    setStudentFormLoading(true);
+
+    try {
+      const { data, error } = await registerStudentByTeacher(
+        studentForm.name,
+        studentForm.email,
+        studentForm.password,
+        studentForm.className,
+        studentForm.parentEmail
+      );
+
+      if (error) throw new Error(error);
+
+      setStudentFormSuccess({
+        email: studentForm.email,
+        password: studentForm.password,
+        regNumber: data.registrationNumber
+      });
+
+      // Refresh student list & dashboard
+      await loadData();
+    } catch (err) {
+      setStudentFormError(err.message || 'Failed to register student');
+    } finally {
+      setStudentFormLoading(false);
+    }
+  };
 
   const loadData = useCallback(async () => {
     setDataLoading(true);
@@ -792,7 +847,27 @@ export const TeacherDashboard = () => {
           {/* â•â• STUDENTS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
           {activeTab === 'students' && (
             <div className="space-y-4">
-              <h2 className="font-display font-bold text-lg">Students ({students.length})</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="font-display font-bold text-lg">Students ({students.length})</h2>
+                <button
+                  onClick={() => {
+                    setStudentForm({
+                      name: '',
+                      email: '',
+                      password: '',
+                      className: 'Grade 10-A',
+                      parentEmail: ''
+                    });
+                    setStudentFormError('');
+                    setStudentFormSuccess(null);
+                    setShowAddStudentModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-900 bg-gradient-to-tr from-brand-cyan to-brand-purple rounded-xl shadow-lg hover:shadow-cyan-500/10 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" />
+                  Register Student
+                </button>
+              </div>
               {students.length === 0 ? (
                 <EmptyState icon={Users} title="No students registered" description="Students will appear here after they sign up." iconColorClass="text-brand-cyan border-brand-cyan/20 bg-brand-cyan/5" />
               ) : (
@@ -1148,6 +1223,206 @@ export const TeacherDashboard = () => {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Register Student Modal Dialog */}
+          {showAddStudentModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+              <div className={`w-full max-w-md p-6 rounded-3xl border relative ${theme === 'dark' ? 'bg-slate-950 border-white/10 text-white' : 'bg-white border-black/10 text-slate-900'}`}>
+                <button
+                  onClick={() => {
+                    if (!studentFormLoading) {
+                      setShowAddStudentModal(false);
+                      setStudentFormSuccess(null);
+                    }
+                  }}
+                  className="absolute top-4 right-4 p-1 text-slate-400 hover:text-white"
+                  disabled={studentFormLoading}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                <h3 className="font-display font-extrabold text-lg mb-1 flex items-center gap-2">
+                  <Users className="h-5 w-5 text-brand-cyan" />
+                  Register New Student
+                </h3>
+                <p className="text-[11px] text-slate-400 mb-4">Provide details below to manually register a new student account.</p>
+
+                {studentFormError && (
+                  <div className="p-2.5 rounded-xl text-xs mb-3 bg-red-500/10 border border-red-500/20 text-red-400">
+                    {studentFormError}
+                  </div>
+                )}
+
+                {studentFormSuccess ? (
+                  <div className="space-y-4 text-left">
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-semibold flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                      <span>Student registered successfully!</span>
+                    </div>
+                    <div className="p-4 bg-slate-900/60 rounded-xl border border-white/5 space-y-2 text-xs">
+                      <div>
+                        <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Registration Number</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="font-mono text-brand-cyan text-sm font-bold">{studentFormSuccess.regNumber}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(studentFormSuccess.regNumber);
+                              alert("Copied Registration Number!");
+                            }}
+                            className="text-[10px] text-brand-purple hover:underline"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                      <div className="border-t border-white/5 pt-2">
+                        <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Email Address</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-white font-medium">{studentFormSuccess.email}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(studentFormSuccess.email);
+                              alert("Copied Email!");
+                            }}
+                            className="text-[10px] text-brand-purple hover:underline"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                      <div className="border-t border-white/5 pt-2">
+                        <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Temporary Password</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-white font-mono">{studentFormSuccess.password}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(studentFormSuccess.password);
+                              alert("Copied Password!");
+                            }}
+                            className="text-[10px] text-brand-purple hover:underline"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddStudentModal(false);
+                        setStudentFormSuccess(null);
+                      }}
+                      className="w-full py-3 bg-gradient-to-r from-brand-cyan to-brand-purple text-white font-bold rounded-xl transition-all cursor-pointer text-xs"
+                    >
+                      Done
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleRegisterStudentSubmit} className="space-y-3.5 text-left">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Full Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="John Doe"
+                        value={studentForm.name}
+                        onChange={e => setStudentForm(f => ({ ...f, name: e.target.value }))}
+                        className={`w-full py-2 px-3 text-xs rounded-xl border ${theme === 'dark' ? 'border-white/10 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-800'}`}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Email Address *</label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="student@academy.com"
+                        value={studentForm.email}
+                        onChange={e => setStudentForm(f => ({ ...f, email: e.target.value }))}
+                        className={`w-full py-2 px-3 text-xs rounded-xl border ${theme === 'dark' ? 'border-white/10 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-800'}`}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Password *</label>
+                        <button
+                          type="button"
+                          onClick={generateRandomPassword}
+                          className="text-[9px] font-bold text-brand-cyan hover:underline cursor-pointer"
+                        >
+                          Auto-Generate
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type={showStudentPassword ? 'text' : 'password'}
+                          required
+                          minLength={6}
+                          placeholder="••••••••"
+                          value={studentForm.password}
+                          onChange={e => setStudentForm(f => ({ ...f, password: e.target.value }))}
+                          className={`w-full py-2 pl-3 pr-10 text-xs rounded-xl border ${theme === 'dark' ? 'border-white/10 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-800'}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowStudentPassword(!showStudentPassword)}
+                          className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 cursor-pointer"
+                        >
+                          {showStudentPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Class/Grade *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Grade 10-A"
+                          value={studentForm.className}
+                          onChange={e => setStudentForm(f => ({ ...f, className: e.target.value }))}
+                          className={`w-full py-2 px-3 text-xs rounded-xl border ${theme === 'dark' ? 'border-white/10 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-800'}`}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Parent's Email (Optional)</label>
+                        <input
+                          type="email"
+                          placeholder="parent@email.com"
+                          value={studentForm.parentEmail}
+                          onChange={e => setStudentForm(f => ({ ...f, parentEmail: e.target.value }))}
+                          className={`w-full py-2 px-3 text-xs rounded-xl border ${theme === 'dark' ? 'border-white/10 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-800'}`}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddStudentModal(false)}
+                        className={`flex-1 py-2.5 rounded-xl border text-xs font-bold ${theme === 'dark' ? 'border-white/10 hover:bg-white/5 text-slate-300' : 'border-slate-200 hover:bg-slate-100 text-slate-700'}`}
+                        disabled={studentFormLoading}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={studentFormLoading}
+                        className="flex-1 py-2.5 bg-gradient-to-r from-brand-purple to-brand-cyan text-white text-xs font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {studentFormLoading ? <RefreshCw className="h-4.5 w-4.5 animate-spin" /> : <Plus className="h-4.5 w-4.5" />}
+                        Register Student
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
             </div>
           )}
 

@@ -261,7 +261,7 @@ export const LandingPage = () => {
               </div>
               <h4 className={`text-lg font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Unified Notification Center</h4>
               <p className={`mt-3 text-sm font-light leading-relaxed ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
-                Seamless alert system integrating local browser push reminders, parent activity alerts, and simulated email templates dispatched automatically upon event trigger.
+                Seamless alert system integrating local browser push reminders, automated event triggers, and simulated email templates dispatched automatically.
               </p>
             </div>
 

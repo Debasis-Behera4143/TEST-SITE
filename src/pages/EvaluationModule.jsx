@@ -7,7 +7,8 @@ import { decryptPayload } from '../utils/crypto';
 import { generateAIEvaluationFeedback } from '../services/gemini';
 import {
   ArrowLeft, Sparkles, BrainCircuit, CheckCircle, Save, CheckSquare,
-  RefreshCw, AlertTriangle, Eye, Download, ZoomIn, ZoomOut, FileText
+  RefreshCw, AlertTriangle, Eye, Download, ZoomIn, ZoomOut, FileText,
+  Trash2, Plus
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -22,24 +23,133 @@ const gradeFromPct = (pct) => {
 
 const fetchFileAsBase64 = async (url) => {
   try {
-    const response = await fetch(url);
-    const blob = await response.blob();
+    let blob = null;
+    let mimeType = null;
+
+    // Check if it's a Supabase URL and we are in Live Mode to use SDK download (bypasses CORS/private restrictions)
+    if (isLiveMode && supabase && url.includes('/storage/v1/object/')) {
+      try {
+        const marker = '/storage/v1/object/';
+        const index = url.indexOf(marker);
+        const parts = url.substring(index + marker.length).split('/');
+        if (parts.length >= 3) {
+          // parts[0] is access type (public/sign/authenticated), parts[1] is bucket name
+          const bucket = parts[1];
+          const filePath = parts.slice(2).join('/');
+
+          console.log(`[EduTrack AI]: Fetching from Supabase bucket "${bucket}" path: "${filePath}"`);
+          const { data, error } = await supabase.storage.from(bucket).download(filePath);
+          if (error) {
+            console.warn(`[EduTrack AI]: Supabase SDK download failed for path: ${filePath}:`, error);
+          } else if (data) {
+            blob = data;
+            mimeType = data.type;
+          }
+        }
+      } catch (parseErr) {
+        console.warn("[EduTrack AI]: Error parsing Supabase URL or using SDK download:", parseErr);
+      }
+    }
+
+    // Fallback to standard fetch if not a Supabase URL or SDK download failed
+    if (!blob) {
+      console.log(`[EduTrack AI]: Fetching file via standard HTTP request from ${url}`);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP status ${response.status}`);
+      }
+      blob = await response.blob();
+      mimeType = blob.type;
+    }
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64String = reader.result.split(',')[1];
         resolve({
           base64: base64String,
-          mimeType: blob.type
+          mimeType: mimeType || blob.type
         });
       };
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
   } catch (err) {
-    console.warn("Failed to fetch file as base64:", err);
+    console.warn("[EduTrack AI]: Failed to fetch file as base64:", err);
     return null;
   }
+};
+
+const formatDetailedAnswersToText = (answers) => {
+  if (!answers) return '';
+  if (typeof answers === 'string') return answers;
+  if (!Array.isArray(answers)) return '';
+  return answers.map((item, idx) => {
+    const parts = [];
+    const qNum = item.questionNumber || `Question ${idx + 1}`;
+    parts.push(`[${qNum}] (${item.status || 'Partially Correct'})`);
+    if (item.questionText) parts.push(`Question: ${item.questionText}`);
+    if (item.studentAnswer) parts.push(`Student's Answer: ${item.studentAnswer}`);
+    if (item.keywordsMatched && item.keywordsMatched.length > 0) parts.push(`Matched Keywords: ${item.keywordsMatched.join(', ')}`);
+    if (item.keywordsMissing && item.keywordsMissing.length > 0) parts.push(`Missing Keywords: ${item.keywordsMissing.join(', ')}`);
+    if (item.mistake) parts.push(`Mistake: ${item.mistake}`);
+    if (item.improvement) parts.push(`Improvement: ${item.improvement}`);
+    if (item.correctAnswer) parts.push(`Model Answer: ${item.correctAnswer}`);
+    return parts.join('\n');
+  }).join('\n\n----------------------------------------\n\n');
+};
+
+export const renderMarkdown = (text) => {
+  if (!text) return '<p class="text-slate-500 italic">No notes entered yet.</p>';
+  
+  // Escape HTML to prevent XSS
+  let html = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Code blocks: ```js ... ```
+  html = html.replace(/```([\s\S]*?)```/g, (match, p1) => {
+    return `<pre class="bg-slate-950/80 p-3.5 rounded-xl my-3 overflow-x-auto font-mono text-xs text-brand-cyan border border-white/5 whitespace-pre-wrap">${p1.trim()}</pre>`;
+  });
+
+  // Inline code: `code`
+  html = html.replace(/`([^`\n]+)`/g, '<code class="bg-slate-900 px-1.5 py-0.5 rounded font-mono text-[11px] text-brand-cyan">$1</code>');
+
+  // Headings
+  html = html.replace(/^### (.*?)$/gm, '<h5 class="text-xs font-extrabold text-slate-200 mt-4 mb-2 uppercase tracking-wide">$1</h5>');
+  html = html.replace(/^## (.*?)$/gm, '<h4 class="text-sm font-extrabold text-brand-cyan mt-5 mb-2.5">$1</h4>');
+  html = html.replace(/^# (.*?)$/gm, '<h3 class="text-base font-extrabold text-white mt-6 mb-3 border-b border-white/10 pb-1.5">$1</h3>');
+
+  // Bold: **text**
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-white">$1</strong>');
+  html = html.replace(/__([^_]+)__/g, '<strong class="font-bold text-white">$1</strong>');
+
+  // Italic: *text*
+  html = html.replace(/\*([^*]+)\*/g, '<em class="italic text-slate-200">$1</em>');
+  html = html.replace(/_([^_]+)_/g, '<em class="italic text-slate-200">$1</em>');
+
+  // Horizontal Rule: ---
+  html = html.replace(/^---$/gm, '<hr class="border-white/10 my-4" />');
+
+  // Bullet Lists: - item or * item
+  html = html.replace(/^\s*[-*]\s+(.*?)$/gm, '<li class="ml-4 list-disc text-slate-350 my-1 leading-relaxed">$1</li>');
+
+  // Numbered Lists: 1. item
+  html = html.replace(/^\s*\d+\.\s+(.*?)$/gm, '<li class="ml-4 list-decimal text-slate-350 my-1 leading-relaxed">$1</li>');
+
+  // Process paragraphs
+  const lines = html.split('\n');
+  const processedLines = lines.map(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('<h') || trimmed.startsWith('<li') || trimmed.startsWith('<pre') || trimmed.startsWith('</pre') || trimmed.startsWith('<hr') || trimmed.startsWith('<p') || trimmed.startsWith('</p')) {
+      return line;
+    }
+    return `<p class="my-2 text-slate-350 leading-relaxed font-light text-xs">${line}</p>`;
+  });
+  
+  return processedLines.join('\n');
 };
 
 export const EvaluationModule = () => {
@@ -69,6 +179,58 @@ export const EvaluationModule = () => {
   // AI state
   const [aiRunning, setAiRunning] = useState(false);
   const [aiResult, setAiResult] = useState(null);
+  const [detailedAnswersText, setDetailedAnswersText] = useState('');
+  const [activeAuditTab, setActiveAuditTab] = useState('edit'); // 'edit' | 'preview'
+
+  // Sync formatted text representing detailedAnswers array/string
+  useEffect(() => {
+    if (aiResult) {
+      if (typeof aiResult.detailedAnswers === 'string') {
+        setDetailedAnswersText(aiResult.detailedAnswers);
+      } else if (Array.isArray(aiResult.detailedAnswers)) {
+        setDetailedAnswersText(formatDetailedAnswersToText(aiResult.detailedAnswers));
+      } else {
+        setDetailedAnswersText('');
+      }
+    } else {
+      setDetailedAnswersText('');
+    }
+  }, [aiResult]);
+
+  const handleDetailedAnswersTextChange = (val) => {
+    setDetailedAnswersText(val);
+    setAiResult(prev => {
+      if (!prev) {
+        return {
+          studentFeedback: 'Manual feedback by teacher.',
+          parentFeedback: 'Manual feedback by teacher.',
+          strengths: ['Good overall attempt.'],
+          weakAreas: ['Focus on revision.'],
+          improvementSuggestions: ['Study consistently.'],
+          revisionPlan: 'Days 1-7: Standard revision.',
+          motivationMessage: 'Keep up the effort!',
+          detailedAnswers: val
+        };
+      }
+      return {
+        ...prev,
+        detailedAnswers: val
+      };
+    });
+  };
+
+  const startManualAudit = () => {
+    setAiResult({
+      studentFeedback: 'Manual feedback by teacher.',
+      parentFeedback: 'Manual feedback by teacher.',
+      strengths: ['Good overall attempt.'],
+      weakAreas: ['Focus on revision.'],
+      improvementSuggestions: ['Study consistently.'],
+      revisionPlan: 'Days 1-7: Standard revision.',
+      motivationMessage: 'Keep up the effort!',
+      detailedAnswers: ''
+    });
+  };
 
   const loadSubmission = useCallback(async () => {
     if (!submissionId) return;
@@ -93,6 +255,18 @@ export const EvaluationModule = () => {
           setMarks(res.marks_obtained);
           setTeacherRemarks(res.teacher_remarks || res.feedback || '');
           setAiResult(res.ai_feedback);
+        } else {
+          // Initialize empty aiResult so text box is visible by default
+          setAiResult({
+            studentFeedback: '',
+            parentFeedback: '',
+            strengths: [],
+            weakAreas: [],
+            improvementSuggestions: [],
+            revisionPlan: '',
+            motivationMessage: '',
+            detailedAnswers: ''
+          });
         }
       } else {
         const db = JSON.parse(localStorage.getItem('edutrack_mock_db'));
@@ -116,6 +290,18 @@ export const EvaluationModule = () => {
           setMarks(res.marks_obtained);
           setTeacherRemarks(res.teacher_remarks || res.feedback || '');
           setAiResult(res.ai_feedback);
+        } else {
+          // Initialize empty aiResult so text box is visible by default
+          setAiResult({
+            studentFeedback: '',
+            parentFeedback: '',
+            strengths: [],
+            weakAreas: [],
+            improvementSuggestions: [],
+            revisionPlan: '',
+            motivationMessage: '',
+            detailedAnswers: ''
+          });
         }
       }
     } catch (err) {
@@ -133,7 +319,7 @@ export const EvaluationModule = () => {
     setSavingDraft(true);
     setStatusMsg('');
     try {
-      await mockDb.saveDraftResult(submissionId, parseFloat(marks), teacherRemarks);
+      await mockDb.saveDraftResult(submissionId, parseFloat(marks), teacherRemarks, aiResult);
       setStatusMsg('Draft saved successfully.');
       setStatusType('success');
       setTimeout(() => setStatusMsg(''), 3000);
@@ -160,46 +346,72 @@ export const EvaluationModule = () => {
     }
 
     setPublishing(true);
-    setStatusMsg('Generating AI feedback via Gemini…');
+    setStatusMsg('Publishing result...');
     setStatusType('info');
 
     try {
-      // 1. Generate AI feedback
-      let aiFeedback = null;
-      try {
-        let studentAnswerFile = null;
-        if (fileUrl && fileUrl.startsWith('http')) {
-          setStatusMsg('Reading student answer sheet...');
-          studentAnswerFile = await fetchFileAsBase64(fileUrl);
-        }
-        let questionPaperFile = null;
-        if (test?.question_paper_url && test.question_paper_url.startsWith('http')) {
-          setStatusMsg('Reading test question paper...');
-          questionPaperFile = await fetchFileAsBase64(test.question_paper_url);
-        }
+      // Determine if we need to generate AI feedback (only if aiResult fields are empty)
+      const isAiResultEmpty = !aiResult || (
+        !aiResult.studentFeedback &&
+        !aiResult.parentFeedback &&
+        (!detailedAnswersText || detailedAnswersText.trim() === '')
+      );
 
+      let finalFeedback = null;
+
+      if (isAiResultEmpty) {
         setStatusMsg('Generating AI feedback via Gemini…');
-        aiFeedback = await generateAIEvaluationFeedback({
-          subject: test.subject,
-          marks: marksNum,
-          totalMarks,
-          teacherRemarks,
-          studentAnswerFile,
-          questionPaperFile
-        });
-      } catch (aiErr) {
-        console.warn('Gemini feedback failed, continuing without:', aiErr);
+        try {
+          let studentAnswerFile = null;
+          if (fileUrl && fileUrl.startsWith('http')) {
+            setStatusMsg('Reading student answer sheet...');
+            studentAnswerFile = await fetchFileAsBase64(fileUrl);
+          }
+          let questionPaperFile = null;
+          if (test?.question_paper_url && test.question_paper_url.startsWith('http')) {
+            setStatusMsg('Reading test question paper...');
+            questionPaperFile = await fetchFileAsBase64(test.question_paper_url);
+          }
+
+          finalFeedback = await generateAIEvaluationFeedback({
+            subject: test.subject,
+            marks: marksNum,
+            totalMarks,
+            teacherRemarks,
+            testTitle: test?.title || '',
+            testDescription: test?.description || '',
+            studentAnswerFile,
+            questionPaperFile
+          });
+        } catch (aiErr) {
+          console.warn('Gemini feedback failed, continuing with fallback:', aiErr);
+          finalFeedback = {
+            studentFeedback: `Good effort. Remarks: "${teacherRemarks}"`,
+            parentFeedback: `Your child scored ${marksNum}/${totalMarks}. Remarks: "${teacherRemarks}"`,
+            strengths: ['Completed test submission.'],
+            weakAreas: ['Focus on revision.'],
+            improvementSuggestions: ['Practice consistently.'],
+            revisionPlan: 'Days 1-7: General revision.',
+            motivationMessage: 'Keep up the effort!',
+            detailedAnswers: detailedAnswersText || ''
+          };
+        }
+      } else {
+        finalFeedback = {
+          ...aiResult,
+          detailedAnswers: detailedAnswersText
+        };
       }
 
       const pct = parseFloat(((marksNum / totalMarks) * 100).toFixed(1));
       const grade = gradeFromPct(pct);
 
       // 2. Publish result
-      await mockDb.publishResult(submissionId, marksNum, grade, teacherRemarks, aiFeedback);
+      await mockDb.publishResult(submissionId, marksNum, grade, teacherRemarks, finalFeedback);
 
       setStatusMsg('Result published! Student notified via email.');
       setStatusType('success');
-      setAiResult(aiFeedback);
+      setAiResult(finalFeedback);
 
       confetti({ particleCount: 100, spread: 70, origin: { y: 0.7 } });
 
@@ -220,7 +432,7 @@ export const EvaluationModule = () => {
     setStatusType('info');
     try {
       const currentMarks = marks || Math.round((test.total_marks || 40) * 0.80);
-      
+
       let studentAnswerFile = null;
       if (fileUrl && fileUrl.startsWith('http')) {
         setStatusMsg('Reading student answer sheet...');
@@ -238,6 +450,8 @@ export const EvaluationModule = () => {
         marks: parseFloat(currentMarks),
         totalMarks: test.total_marks,
         teacherRemarks: teacherRemarks || 'Evaluated by teacher.',
+        testTitle: test?.title || '',
+        testDescription: test?.description || '',
         studentAnswerFile,
         questionPaperFile
       });
@@ -384,7 +598,7 @@ export const EvaluationModule = () => {
                 /* No real file â€” show instructional placeholder */
                 <div className={`w-full max-w-lg p-8 rounded-2xl bg-white text-slate-900 shadow-2xl font-mono text-[11px] leading-relaxed border-2 border-slate-300 min-h-[350px] relative`}>
                   <div className="absolute top-0 left-12 right-12 flex justify-between">
-                    {[1,2,3,4,5,6].map(i => <div key={i} className="h-4 w-2 bg-slate-400 rounded-full -mt-2" />)}
+                    {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-4 w-2 bg-slate-400 rounded-full -mt-2" />)}
                   </div>
                   <div className="mt-4 space-y-3">
                     <div className="text-right text-slate-400 border-b border-slate-200 pb-2">
@@ -437,88 +651,78 @@ export const EvaluationModule = () => {
               <button type="button" onClick={runAIAnalysis} disabled={aiRunning}
                 className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-bold rounded-xl flex items-center gap-1.5 shrink-0">
                 {aiRunning ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <BrainCircuit className="h-3.5 w-3.5" />}
-                {aiRunning ? 'Analyzingâ€¦' : 'Analyze'}
+                {aiRunning ? 'Analyzing…' : 'Analyze'}
               </button>
             </div>
 
-            {aiResult && (
+            {(aiResult || (!aiResult && !aiRunning)) && (
               <div className="mt-4 pt-4 border-t border-white/5 space-y-4 text-xs text-left">
-                {aiResult.studentFeedback && (
+                {aiResult && aiResult.studentFeedback && (
                   <div>
                     <span className="block text-[10px] font-bold text-brand-cyan uppercase tracking-wider mb-1">Student Feedback</span>
                     <p className="text-slate-350 leading-relaxed font-light">{aiResult.studentFeedback}</p>
                   </div>
                 )}
 
-                {/* Detailed Answer Review */}
-                {aiResult.detailedAnswers && aiResult.detailedAnswers.length > 0 && (
-                  <div className="space-y-3">
-                    <span className="block text-[10px] font-bold text-brand-purple uppercase tracking-wider">Detailed Q&A Audit</span>
-                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-                      {aiResult.detailedAnswers.map((item, idx) => (
-                        <div key={idx} className="p-3.5 rounded-xl border border-white/5 bg-slate-950/40 text-xs space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="font-bold text-brand-cyan">{item.questionNumber}</span>
-                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                              item.status === 'Correct' ? 'bg-emerald-500/10 text-emerald-400' :
-                              item.status === 'Partially Correct' ? 'bg-yellow-500/10 text-yellow-400' :
-                              'bg-rose-500/10 text-rose-450'
-                            }`}>
-                              {item.status}
-                            </span>
-                          </div>
-                          
-                          <div>
-                            <span className="text-[10px] text-slate-500 block font-semibold">Question:</span>
-                            <p className="text-slate-300 font-light mt-0.5">{item.questionText}</p>
-                          </div>
-
-                          <div className="p-2.5 rounded bg-slate-900/40 border border-white/5">
-                            <span className="text-[9px] text-slate-500 block font-semibold">Student's Answer:</span>
-                            <p className="text-slate-400 italic font-light mt-0.5">"{item.studentAnswer}"</p>
-                          </div>
-
-                          {/* Keywords tags */}
-                          <div className="flex flex-wrap gap-1.5 py-1">
-                            {item.keywordsMatched && item.keywordsMatched.map((k, i) => (
-                              <span key={i} className="px-2 py-0.5 rounded bg-emerald-500/10 text-[9px] text-emerald-400 border border-emerald-500/20">
-                                ✓ {k}
-                              </span>
-                            ))}
-                            {item.keywordsMissing && item.keywordsMissing.map((k, i) => (
-                              <span key={i} className="px-2 py-0.5 rounded bg-rose-500/10 text-[9px] text-rose-450 border border-rose-500/20">
-                                ✗ {k}
-                              </span>
-                            ))}
-                          </div>
-
-                          {item.mistake && (
-                            <div className="text-[11px]">
-                              <span className="text-rose-450 font-semibold">Mistake: </span>
-                              <span className="text-slate-350 font-light">{item.mistake}</span>
-                            </div>
-                          )}
-
-                          {item.improvement && (
-                            <div className="text-[11px]">
-                              <span className="text-yellow-400 font-semibold">Improvement: </span>
-                              <span className="text-slate-350 font-light">{item.improvement}</span>
-                            </div>
-                          )}
-
-                          {item.correctAnswer && (
-                            <div className="p-2.5 rounded bg-brand-purple/5 border border-brand-purple/10 text-[11px]">
-                              <span className="text-brand-cyan font-semibold block mb-0.5">Proper Answer Model:</span>
-                              <p className="text-slate-300 font-light">{item.correctAnswer}</p>
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                {/* Detailed Q&A Audit - Single Text Area with markdown preview */}
+                {aiResult && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="block text-[10px] font-bold text-brand-purple uppercase tracking-wider">Detailed Q&A Audit</span>
+                      <div className="flex gap-1 bg-slate-950/40 p-0.5 rounded-lg border border-white/5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setActiveAuditTab('edit')}
+                          className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                            activeAuditTab === 'edit'
+                              ? 'bg-slate-800 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <FileText className="h-3 w-3" />
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveAuditTab('preview')}
+                          className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                            activeAuditTab === 'preview'
+                              ? 'bg-slate-800 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <Eye className="h-3 w-3" />
+                          Preview
+                        </button>
+                      </div>
                     </div>
+
+                    {activeAuditTab === 'edit' ? (
+                      <textarea
+                        rows="14"
+                        value={detailedAnswersText}
+                        onChange={(e) => handleDetailedAnswersTextChange(e.target.value)}
+                        className={`w-full p-3.5 rounded-2xl border text-xs font-mono font-light resize-y focus:outline-none transition-all leading-relaxed ${
+                          theme === 'dark'
+                            ? 'bg-slate-950/40 border-white/5 text-slate-300 focus:border-brand-purple/45 placeholder-slate-650'
+                            : 'bg-white/60 border-slate-200 text-slate-800 focus:border-brand-purple/45 placeholder-slate-400'
+                        }`}
+                        placeholder="Write detailed Q&A audit notes in Markdown..."
+                      />
+                    ) : (
+                      <div
+                        className={`w-full p-4 rounded-2xl border text-xs min-h-[280px] max-h-[350px] overflow-y-auto transition-all leading-relaxed text-left ${
+                          theme === 'dark'
+                            ? 'bg-slate-950/40 border-white/5 text-slate-300'
+                            : 'bg-white/60 border-slate-200 text-slate-800'
+                        }`}
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(detailedAnswersText) }}
+                      />
+                    )}
                   </div>
                 )}
 
-                {aiResult.strengths?.length > 0 && (
+                {aiResult && aiResult.strengths?.length > 0 && (
                   <div>
                     <span className="block text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1">Strengths</span>
                     <ul className="space-y-1">
@@ -526,11 +730,11 @@ export const EvaluationModule = () => {
                     </ul>
                   </div>
                 )}
-                {aiResult.weakAreas?.length > 0 && (
+                {aiResult && aiResult.weakAreas?.length > 0 && (
                   <div>
                     <span className="block text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1">Focus Areas</span>
                     <ul className="space-y-1">
-                      {aiResult.weakAreas.map((w, i) => <li key={i} className="text-[11px] text-slate-355 flex gap-1.5"><span className="text-red-400">!</span>{w}</li>)}
+                      {aiResult.weakAreas.map((w, i) => <li key={i} className="text-[11px] text-slate-350 flex gap-1.5"><span className="text-red-400">!</span>{w}</li>)}
                     </ul>
                   </div>
                 )}
@@ -546,11 +750,10 @@ export const EvaluationModule = () => {
             </h3>
 
             {statusMsg && (
-              <div className={`p-3 rounded-xl text-xs mb-4 border ${
-                statusType === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
-                statusType === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
-                'bg-indigo-500/10 border-indigo-500/20 text-indigo-300'
-              }`}>
+              <div className={`p-3 rounded-xl text-xs mb-4 border ${statusType === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
+                  statusType === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
+                    'bg-indigo-500/10 border-indigo-500/20 text-indigo-300'
+                }`}>
                 {statusMsg}
               </div>
             )}
@@ -569,19 +772,17 @@ export const EvaluationModule = () => {
                   value={marks}
                   onChange={e => setMarks(e.target.value)}
                   placeholder={`0 â€“ ${test?.total_marks}`}
-                  className={`w-full py-2.5 px-3 text-sm font-bold rounded-xl border ${
-                    theme === 'dark' ? 'border-white/10 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-900'
-                  }`}
+                  className={`w-full py-2.5 px-3 text-sm font-bold rounded-xl border ${theme === 'dark' ? 'border-white/10 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-900'
+                    }`}
                 />
                 {marks && test?.total_marks && (
                   <div className="flex items-center justify-between text-[10px] mt-1">
                     <span className="text-slate-500">
                       {((parseFloat(marks) / test.total_marks) * 100).toFixed(1)}%
                     </span>
-                    <span className={`font-bold ${
-                      parseFloat(marks) / test.total_marks >= 0.8 ? 'text-emerald-400' :
-                      parseFloat(marks) / test.total_marks >= 0.6 ? 'text-yellow-400' : 'text-red-400'
-                    }`}>
+                    <span className={`font-bold ${parseFloat(marks) / test.total_marks >= 0.8 ? 'text-emerald-400' :
+                        parseFloat(marks) / test.total_marks >= 0.6 ? 'text-yellow-400' : 'text-red-400'
+                      }`}>
                       Grade: {gradeFromPct(((parseFloat(marks) / test.total_marks) * 100))}
                     </span>
                   </div>
@@ -598,9 +799,8 @@ export const EvaluationModule = () => {
                   value={teacherRemarks}
                   onChange={e => setTeacherRemarks(e.target.value)}
                   placeholder="Good understanding of reflection. Needs improvement in numericalsâ€¦"
-                  className={`w-full py-2.5 px-3 text-xs rounded-xl border resize-none ${
-                    theme === 'dark' ? 'border-white/10 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-800'
-                  }`}
+                  className={`w-full py-2.5 px-3 text-xs rounded-xl border resize-none ${theme === 'dark' ? 'border-white/10 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-800'
+                    }`}
                 />
               </div>
 
@@ -609,9 +809,8 @@ export const EvaluationModule = () => {
                   type="button"
                   onClick={handleSaveDraft}
                   disabled={savingDraft || publishing}
-                  className={`flex-1 py-3 rounded-xl border text-[10px] font-bold flex items-center justify-center gap-1.5 disabled:opacity-50 ${
-                    theme === 'dark' ? 'border-white/10 hover:bg-white/5 text-slate-300' : 'border-slate-200 hover:bg-slate-100 text-slate-700'
-                  }`}>
+                  className={`flex-1 py-3 rounded-xl border text-[10px] font-bold flex items-center justify-center gap-1.5 disabled:opacity-50 ${theme === 'dark' ? 'border-white/10 hover:bg-white/5 text-slate-300' : 'border-slate-200 hover:bg-slate-100 text-slate-700'
+                    }`}>
                   {savingDraft ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                   Save Draft
                 </button>

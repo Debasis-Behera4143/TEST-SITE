@@ -25,6 +25,59 @@ import EnglishSandbox from '../components/subject-widgets/EnglishSandbox';
 import PaperPlaneNotification from '../components/PaperPlaneNotification';
 import RocketSubmission from '../components/RocketSubmission';
 
+export const renderMarkdown = (text) => {
+  if (!text) return '<p class="text-slate-500 italic">No notes entered yet.</p>';
+  
+  // Escape HTML to prevent XSS
+  let html = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Code blocks: ```js ... ```
+  html = html.replace(/```([\s\S]*?)```/g, (match, p1) => {
+    return `<pre class="bg-slate-950/80 p-3.5 rounded-xl my-3 overflow-x-auto font-mono text-xs text-brand-cyan border border-white/5 whitespace-pre-wrap">${p1.trim()}</pre>`;
+  });
+
+  // Inline code: `code`
+  html = html.replace(/`([^`\n]+)`/g, '<code class="bg-slate-900 px-1.5 py-0.5 rounded font-mono text-[11px] text-brand-cyan">$1</code>');
+
+  // Headings
+  html = html.replace(/^### (.*?)$/gm, '<h5 class="text-xs font-extrabold text-slate-200 mt-4 mb-2 uppercase tracking-wide">$1</h5>');
+  html = html.replace(/^## (.*?)$/gm, '<h4 class="text-sm font-extrabold text-brand-cyan mt-5 mb-2.5">$1</h4>');
+  html = html.replace(/^# (.*?)$/gm, '<h3 class="text-base font-extrabold text-white mt-6 mb-3 border-b border-white/10 pb-1.5">$1</h3>');
+
+  // Bold: **text**
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-white">$1</strong>');
+  html = html.replace(/__([^_]+)__/g, '<strong class="font-bold text-white">$1</strong>');
+
+  // Italic: *text*
+  html = html.replace(/\*([^*]+)\*/g, '<em class="italic text-slate-200">$1</em>');
+  html = html.replace(/_([^_]+)_/g, '<em class="italic text-slate-200">$1</em>');
+
+  // Horizontal Rule: ---
+  html = html.replace(/^---$/gm, '<hr class="border-white/10 my-4" />');
+
+  // Bullet Lists: - item or * item
+  html = html.replace(/^\s*[-*]\s+(.*?)$/gm, '<li class="ml-4 list-disc text-slate-350 my-1 leading-relaxed">$1</li>');
+
+  // Numbered Lists: 1. item
+  html = html.replace(/^\s*\d+\.\s+(.*?)$/gm, '<li class="ml-4 list-decimal text-slate-350 my-1 leading-relaxed">$1</li>');
+
+  // Process paragraphs
+  const lines = html.split('\n');
+  const processedLines = lines.map(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('<h') || trimmed.startsWith('<li') || trimmed.startsWith('<pre') || trimmed.startsWith('</pre') || trimmed.startsWith('<hr') || trimmed.startsWith('<p') || trimmed.startsWith('</p')) {
+      return line;
+    }
+    return `<p class="my-2 text-slate-350 leading-relaxed font-light text-xs">${line}</p>`;
+  });
+  
+  return processedLines.join('\n');
+};
+
 export const StudentDashboard = () => {
   const { user, student, logout, theme } = useAuth();
   const [tests, setTests] = useState([]);
@@ -1658,70 +1711,77 @@ export const StudentDashboard = () => {
                     )}
 
                     {/* Detailed Answer Review */}
-                    {selectedResult.result.ai_feedback.detailedAnswers && selectedResult.result.ai_feedback.detailedAnswers.length > 0 && (
+                    {selectedResult.result.ai_feedback.detailedAnswers && (
                       <div className="space-y-3">
                         <span className="text-[10px] font-bold text-brand-purple uppercase tracking-wider block">Detailed Question & Answer Review</span>
-                        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-                          {selectedResult.result.ai_feedback.detailedAnswers.map((item, idx) => (
-                            <div key={idx} className="p-3.5 rounded-xl border border-white/5 bg-slate-900/60 text-xs space-y-2">
-                              <div className="flex justify-between items-center">
-                                <span className="font-bold text-brand-cyan">{item.questionNumber}</span>
-                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                  item.status === 'Correct' ? 'bg-emerald-500/10 text-emerald-400' :
-                                  item.status === 'Partially Correct' ? 'bg-yellow-500/10 text-yellow-400' :
-                                  'bg-rose-500/10 text-rose-450'
-                                }`}>
-                                  {item.status}
-                                </span>
-                              </div>
-                              
-                              <div>
-                                <span className="text-[10px] text-slate-500 block">Question:</span>
-                                <p className="text-slate-350 font-light mt-0.5">{item.questionText}</p>
-                              </div>
-
-                              <div className="p-2.5 rounded bg-slate-950/40 border border-white/5">
-                                <span className="text-[9px] text-slate-550 block font-semibold">Student's Answer:</span>
-                                <p className="text-slate-400 italic font-light mt-0.5">"{item.studentAnswer}"</p>
-                              </div>
-
-                              {/* Keywords tags */}
-                              <div className="flex flex-wrap gap-1.5 py-1">
-                                {item.keywordsMatched && item.keywordsMatched.map((k, i) => (
-                                  <span key={i} className="px-2 py-0.5 rounded bg-emerald-500/10 text-[9px] text-emerald-400 border border-emerald-500/20">
-                                    ✓ {k}
+                        {typeof selectedResult.result.ai_feedback.detailedAnswers === 'string' ? (
+                          <div 
+                            className="p-4 rounded-xl border border-white/5 bg-slate-900/60 text-xs text-slate-350 font-light leading-relaxed max-h-[300px] overflow-y-auto text-left"
+                            dangerouslySetInnerHTML={{ __html: renderMarkdown(selectedResult.result.ai_feedback.detailedAnswers) }}
+                          />
+                        ) : Array.isArray(selectedResult.result.ai_feedback.detailedAnswers) && selectedResult.result.ai_feedback.detailedAnswers.length > 0 ? (
+                          <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                            {selectedResult.result.ai_feedback.detailedAnswers.map((item, idx) => (
+                              <div key={idx} className="p-3.5 rounded-xl border border-white/5 bg-slate-900/60 text-xs space-y-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-bold text-brand-cyan">{item.questionNumber}</span>
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                    item.status === 'Correct' ? 'bg-emerald-500/10 text-emerald-400' :
+                                    item.status === 'Partially Correct' ? 'bg-yellow-500/10 text-yellow-400' :
+                                    'bg-rose-500/10 text-rose-455'
+                                  }`}>
+                                    {item.status}
                                   </span>
-                                ))}
-                                {item.keywordsMissing && item.keywordsMissing.map((k, i) => (
-                                  <span key={i} className="px-2 py-0.5 rounded bg-rose-500/10 text-[9px] text-rose-455 border border-rose-500/20">
-                                    ✗ {k}
-                                  </span>
-                                ))}
+                                </div>
+                                
+                                <div>
+                                  <span className="text-[10px] text-slate-500 block">Question:</span>
+                                  <p className="text-slate-350 font-light mt-0.5">{item.questionText}</p>
+                                </div>
+
+                                <div className="p-2.5 rounded bg-slate-950/40 border border-white/5">
+                                  <span className="text-[9px] text-slate-550 block font-semibold">Student's Answer:</span>
+                                  <p className="text-slate-400 italic font-light mt-0.5">"{item.studentAnswer}"</p>
+                                </div>
+
+                                {/* Keywords tags */}
+                                <div className="flex flex-wrap gap-1.5 py-1">
+                                  {item.keywordsMatched && item.keywordsMatched.map((k, i) => (
+                                    <span key={i} className="px-2 py-0.5 rounded bg-emerald-500/10 text-[9px] text-emerald-400 border border-emerald-500/20">
+                                      ✓ {k}
+                                    </span>
+                                  ))}
+                                  {item.keywordsMissing && item.keywordsMissing.map((k, i) => (
+                                    <span key={i} className="px-2 py-0.5 rounded bg-rose-500/10 text-[9px] text-rose-455 border border-rose-500/20">
+                                      ✗ {k}
+                                    </span>
+                                  ))}
+                                </div>
+
+                                {item.mistake && (
+                                  <div className="text-[11px]">
+                                    <span className="text-rose-400 font-semibold">Mistake: </span>
+                                    <span className="text-slate-300 font-light">{item.mistake}</span>
+                                  </div>
+                                )}
+
+                                {item.improvement && (
+                                  <div className="text-[11px]">
+                                    <span className="text-yellow-400 font-semibold">How to Improve: </span>
+                                    <span className="text-slate-300 font-light">{item.improvement}</span>
+                                  </div>
+                                )}
+
+                                {item.correctAnswer && (
+                                  <div className="p-2.5 rounded bg-brand-purple/5 border border-brand-purple/10 text-[11px]">
+                                    <span className="text-brand-cyan font-semibold block mb-0.5">Proper Model Answer to Learn:</span>
+                                    <p className="text-slate-300 font-light">{item.correctAnswer}</p>
+                                  </div>
+                                )}
                               </div>
-
-                              {item.mistake && (
-                                <div className="text-[11px]">
-                                  <span className="text-rose-400 font-semibold">Mistake: </span>
-                                  <span className="text-slate-300 font-light">{item.mistake}</span>
-                                </div>
-                              )}
-
-                              {item.improvement && (
-                                <div className="text-[11px]">
-                                  <span className="text-yellow-400 font-semibold">How to Improve: </span>
-                                  <span className="text-slate-300 font-light">{item.improvement}</span>
-                                </div>
-                              )}
-
-                              {item.correctAnswer && (
-                                <div className="p-2.5 rounded bg-brand-purple/5 border border-brand-purple/10 text-[11px]">
-                                  <span className="text-brand-cyan font-semibold block mb-0.5">Proper Model Answer to Learn:</span>
-                                  <p className="text-slate-300 font-light">{item.correctAnswer}</p>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     )}
 

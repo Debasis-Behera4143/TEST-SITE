@@ -1378,28 +1378,16 @@ export const TeacherDashboard = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Class/Grade *</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="Grade 10-A"
-                          value={studentForm.className}
-                          onChange={e => setStudentForm(f => ({ ...f, className: e.target.value }))}
-                          className={`w-full py-2 px-3 text-xs rounded-xl border ${theme === 'dark' ? 'border-white/10 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-800'}`}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Parent's Email (Optional)</label>
-                        <input
-                          type="email"
-                          placeholder="parent@email.com"
-                          value={studentForm.parentEmail}
-                          onChange={e => setStudentForm(f => ({ ...f, parentEmail: e.target.value }))}
-                          className={`w-full py-2 px-3 text-xs rounded-xl border ${theme === 'dark' ? 'border-white/10 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-800'}`}
-                        />
-                      </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Class/Grade *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Grade 10-A"
+                        value={studentForm.className}
+                        onChange={e => setStudentForm(f => ({ ...f, className: e.target.value }))}
+                        className={`w-full py-2 px-3 text-xs rounded-xl border ${theme === 'dark' ? 'border-white/10 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-800'}`}
+                      />
                     </div>
 
                     <div className="flex gap-2 pt-2">

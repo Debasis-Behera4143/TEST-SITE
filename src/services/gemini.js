@@ -8,12 +8,14 @@ export const generateAIEvaluationFeedback = async ({
   marks,
   totalMarks,
   teacherRemarks,
+  testTitle = '',
+  testDescription = '',
   studentAnswerFile = null,
   questionPaperFile = null
 }) => {
   if (!geminiApiKey || geminiApiKey === 'YOUR_GEMINI_API_KEY') {
     console.warn("[EduTrack AI]: VITE_GEMINI_API_KEY is not configured. Falling back to local diagnostic generator.");
-    return getFallbackFeedback(subject, marks, totalMarks, teacherRemarks);
+    return getFallbackFeedback(subject, marks, totalMarks, teacherRemarks, testTitle, testDescription);
   }
 
   try {
@@ -24,11 +26,19 @@ export const generateAIEvaluationFeedback = async ({
       You are an expert Class 10 academic tutor and AI diagnostic assistant for a smart exam portal.
       Analyze the student's exam performance and generate professional, constructive, and highly detailed feedback.
 
+      TEST DETAILS:
+      - Subject: ${subject}
+      - Test Title: ${testTitle}
+      - Test Description / Questions: "${testDescription}"
+
       If the student's answer sheet file (PDF or image) is attached as inlineData, please perform a deep OCR scan of their answers.
       Compare their answers against the question paper (if attached as inlineData) or the subject curriculum for ${subject}.
 
+      CRITICAL REQUIREMENT:
+      You must evaluate and grade the student's answers specifically for the questions listed in the Test Description / Questions above: "${testDescription}".
+      Do not evaluate arbitrary, hardcoded, or different questions. The detailedAnswers list in your output MUST align exactly with the questions in the test description.
+
       INPUT DETAILS:
-      - Subject: ${subject}
       - Marks Obtained: ${marks} / ${totalMarks}
       - Teacher Remarks: "${teacherRemarks}"
 
@@ -102,85 +112,62 @@ export const generateAIEvaluationFeedback = async ({
     return JSON.parse(responseText);
   } catch (error) {
     console.error("[EduTrack AI]: Gemini API error: ", error);
-    return getFallbackFeedback(subject, marks, totalMarks, teacherRemarks);
+    return getFallbackFeedback(subject, marks, totalMarks, teacherRemarks, testTitle, testDescription);
   }
 };
 
 // Return standard deterministic fallback diagnostic if key is missing (ensuring robustness)
-const getFallbackFeedback = (subject, marks, totalMarks, teacherRemarks) => {
+const getFallbackFeedback = (subject, marks, totalMarks, teacherRemarks, testTitle = '', testDescription = '') => {
   const percentage = ((marks / totalMarks) * 100).toFixed(0);
   const isPassing = percentage >= 60;
 
-  // Generate realistic fallback answers based on subject
+  // Dynamically generate fallback answers based on testTitle and testDescription
   let detailedAnswers = [];
-  if (subject === "Physics") {
-    detailedAnswers = [
-      {
-        questionNumber: "Question 1",
-        questionText: "State Maxwell's four equations in integral form and explain displacement current.",
-        studentAnswer: "Maxwell's equations are for electricity and magnetism. Displacement current is dD/dt.",
-        status: "Partially Correct",
-        keywordsMatched: ["Maxwell's equations", "Displacement current", "electricity"],
-        keywordsMissing: ["integral form", "Maxwell's correction", "time-varying fields"],
-        mistake: "Missed writing the actual mathematical equations in integral form.",
-        improvement: "Review Maxwell's equations and memorize their integral representations (Gauss, Faraday, Ampere laws).",
-        correctAnswer: "The equations are: 1) ∮E·dA = Q/ε0, 2) ∮B·dA = 0, 3) ∮E·dl = -dΦB/dt, 4) ∮B·dl = μ0(I + ε0*dΦE/dt). Displacement current is ID = ε0 * dΦE/dt, which represents the magnetic effect of a time-varying electric field."
-      },
-      {
-        questionNumber: "Question 2",
-        questionText: "Derive the expression for the capacitance of a parallel plate capacitor.",
-        studentAnswer: "Capacitance is C = Q/V. For a parallel plate capacitor, C = ε0*A/d.",
-        status: "Correct",
-        keywordsMatched: ["Capacitance", "parallel plate", "ε0*A/d"],
-        keywordsMissing: [],
-        mistake: "None, but the intermediate derivation steps could be more detailed.",
-        improvement: "Always show the intermediate electric field step E = σ/ε0 = Q/(ε0*A) and V = E*d before writing the final formula.",
-        correctAnswer: "1) Electric field between plates: E = σ/ε0 = Q/(A*ε0). 2) Potential difference: V = E*d = Q*d / (A*ε0). 3) Capacitance: C = Q/V = ε0*A/d."
-      }
-    ];
-  } else if (subject === "Chemistry") {
-    detailedAnswers = [
-      {
-        questionNumber: "Question 1",
-        questionText: "Describe the Friedel-Crafts alkylation of benzene and its limitations.",
-        studentAnswer: "Benzene reacts with alkyl halide in presence of AlCl3. Limitation is carbocation rearrangement.",
-        status: "Partially Correct",
-        keywordsMatched: ["benzene", "alkyl halide", "AlCl3", "rearrangement"],
-        keywordsMissing: ["electrophilic substitution", "polyalkylation", "deactivation"],
-        mistake: "Failed to mention the mechanistics of carbocation electrophilic attack and polyalkylation limitation.",
-        improvement: "Study electrophilic aromatic substitution limits and explain why polyalkylation occurs.",
-        correctAnswer: "Friedel-Crafts alkylation attaches an alkyl group to benzene using R-Cl and AlCl3 catalyst. Major limitations: 1) Carbocation rearrangement, 2) Polyalkylation (since alkyl groups activate the ring), 3) Deactivation (reaction fails with strong deactivating groups)."
-      }
-    ];
-  } else if (subject === "Mathematics") {
-    detailedAnswers = [
-      {
-        questionNumber: "Question 1",
-        questionText: "Find the local extrema of f(x) = x^3 - 3x^2 - 9x + 5 on [-2, 4].",
-        studentAnswer: "Derivative is 3x^2 - 6x - 9. Solving gives x = 3 and x = -1.",
-        status: "Partially Correct",
-        keywordsMatched: ["derivative", "critical points"],
-        keywordsMissing: ["second derivative test", "local extrema values", "interval check"],
-        mistake: "Calculated the critical points but did not identify which is local maximum/minimum and did not calculate the actual extrema values.",
-        improvement: "Apply the second derivative test f''(x) = 6x - 6 to determine concavity at the critical points.",
-        correctAnswer: "1) f'(x) = 3x^2 - 6x - 9 = 0 -> x = -1, 3. 2) f''(x) = 6x - 6. 3) f''(-1) = -12 < 0 (Local Max at x=-1, value = 10). 4) f''(3) = 12 > 0 (Local Min at x=3, value = -22)."
-      }
-    ];
-  } else {
-    detailedAnswers = [
-      {
-        questionNumber: "Question 1",
-        questionText: "Define and explain the core concepts of this subject test.",
-        studentAnswer: "The student provided a basic answer demonstrating foundational understanding.",
-        status: "Partially Correct",
-        keywordsMatched: ["foundational concept"],
-        keywordsMissing: ["analytical rigor", "specific textbook terms"],
-        mistake: "Lack of deep conceptual detail or step-by-step reasoning.",
-        improvement: "Structure your answer with bullet points, precise terms, and concrete examples.",
-        correctAnswer: "A complete answer should define the terms precisely according to textbook standards, outline the main components or processes, and illustrate with a standard diagram or formula."
-      }
+  let questionsList = [];
+
+  if (testDescription) {
+    // Try to split the test description by lines, common bullet points, or numbering
+    const rawLines = testDescription.split(/[\n;]+/).map(l => l.trim()).filter(l => l.length > 8);
+    // Filter out greeting text or general instructions
+    const questionLines = rawLines.filter(line => 
+      line.match(/^(q\d+|question|\d+[\.\)\-:]|\-\s+|[a-z]\s*\))/i) || 
+      line.includes('?') || 
+      line.toLowerCase().includes('explain') || 
+      line.toLowerCase().includes('describe') || 
+      line.toLowerCase().includes('derive') || 
+      line.toLowerCase().includes('find') || 
+      line.toLowerCase().includes('state')
+    );
+
+    if (questionLines.length > 0) {
+      questionsList = questionLines.slice(0, 3);
+    } else if (rawLines.length > 0) {
+      questionsList = rawLines.slice(0, 2);
+    }
+  }
+
+  // Fallback to title-based question if no questions found in description
+  if (questionsList.length === 0) {
+    questionsList = [
+      testTitle ? `Explain the core concepts and applications of: ${testTitle}` : `Define and explain the core concepts of ${subject}.`
     ];
   }
+
+  detailedAnswers = questionsList.map((qText, index) => {
+    // Clean leading numbers or bullet markers
+    const cleanQText = qText.replace(/^(q\d+|question|\d+[\.\)\-:]|\-\s+|[a-z]\s*\))\s*/i, '');
+    return {
+      questionNumber: `Question ${index + 1}`,
+      questionText: cleanQText,
+      studentAnswer: `The student answer sheet contains a basic overview of ${subject} concepts related to "${cleanQText.slice(0, 30)}...".`,
+      status: marks / totalMarks >= 0.85 ? "Correct" : "Partially Correct",
+      keywordsMatched: [subject, "concept"],
+      keywordsMissing: ["precise definitions", "step-by-step reasoning"],
+      mistake: "Missed some specific analytical details or intermediate steps.",
+      improvement: "Ensure to include bullet points, precise scientific terminology, and all intermediate steps.",
+      correctAnswer: `A model answer for "${cleanQText}" should define the terms precisely, describe the mechanism or derivation steps clearly, and provide relevant examples or mathematical formulas.`
+    };
+  });
 
   return {
     studentFeedback: `You obtained ${marks}/${totalMarks} (${percentage}%) in ${subject}. ${

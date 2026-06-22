@@ -462,7 +462,7 @@ export const mockDb = {
       const { error: subErr } = await supabase.from('submissions').update({ status: 'evaluated' }).eq('id', submissionId);
       if (subErr) throw subErr;
 
-      const { data: test } = await supabase.from('tests').select('total_marks, title, subject').eq('id', submission.test_id).single();
+      const { data: test } = await supabase.from('tests').select('total_marks, title, subject, description').eq('id', submission.test_id).single();
       const percentage = parseFloat(((marks / (test ? test.total_marks : 100)) * 100).toFixed(1));
 
       // Fetch Gemini feedback
@@ -472,7 +472,9 @@ export const mockDb = {
           subject: test ? test.subject : "General",
           marks: parseFloat(marks),
           totalMarks: test ? test.total_marks : 100,
-          teacherRemarks: feedback
+          teacherRemarks: feedback,
+          testTitle: test ? test.title : "",
+          testDescription: test ? test.description : ""
         });
         finalAIFeedback = {
           ...(aiFeedback || {}),
@@ -607,7 +609,9 @@ export const mockDb = {
         subject: test ? test.subject : "General",
         marks: parseFloat(marks),
         totalMarks: test ? test.total_marks : 100,
-        teacherRemarks: feedback
+        teacherRemarks: feedback,
+        testTitle: test ? test.title : "",
+        testDescription: test ? test.description : ""
       });
       finalAIFeedback = {
         ...(aiFeedback || {}),
@@ -1099,7 +1103,7 @@ export const mockDb = {
   },
 
   // --- DRAFT / PUBLISH RESULT ---
-  async saveDraftResult(submissionId, marks, teacherRemarks) {
+  async saveDraftResult(submissionId, marks, teacherRemarks, aiFeedback = null) {
     if (isLiveMode && supabase) {
       const { data: submission } = await supabase.from('submissions').select('test_id').eq('id', submissionId).single();
       const { data: test } = submission
@@ -1121,9 +1125,16 @@ export const mockDb = {
         grade,
         teacher_remarks: teacherRemarks,
         feedback: teacherRemarks,
+        ai_feedback: aiFeedback,
         status: 'draft'
-      }, { onConflict: 'submission_id' }).select().single();
-      if (error) throw error;
+      }, { onConflict: 'submission_id' }).select().maybeSingle();
+      
+      if (error) {
+        if (error.code === '42703' && error.message.includes('ai_feedback')) {
+          throw new Error("Database schema out of date: The 'ai_feedback' column is missing in your Supabase 'results' table. Please go to your Supabase Dashboard ➔ SQL Editor, and run: ALTER TABLE results ADD COLUMN ai_feedback JSONB;");
+        }
+        throw error;
+      }
       return data;
     }
 
@@ -1149,7 +1160,7 @@ export const mockDb = {
       grade,
       teacher_remarks: teacherRemarks,
       feedback: teacherRemarks,
-      ai_feedback: existingIdx !== -1 ? db.results[existingIdx].ai_feedback : null,
+      ai_feedback: aiFeedback || (existingIdx !== -1 ? db.results[existingIdx].ai_feedback : null),
       status: 'draft',
       published_at: null
     };
@@ -1179,8 +1190,14 @@ export const mockDb = {
         ai_feedback: aiFeedback,
         status: 'published',
         published_at: new Date().toISOString()
-      }, { onConflict: 'submission_id' }).select().single();
-      if (error) throw error;
+      }, { onConflict: 'submission_id' }).select().maybeSingle();
+      
+      if (error) {
+        if (error.code === '42703' && error.message.includes('ai_feedback')) {
+          throw new Error("Database schema out of date: The 'ai_feedback' column is missing in your Supabase 'results' table. Please go to your Supabase Dashboard ➔ SQL Editor, and run: ALTER TABLE results ADD COLUMN ai_feedback JSONB;");
+        }
+        throw error;
+      }
 
       await supabase.from('notifications').insert({
         user_id: submission.student_id,

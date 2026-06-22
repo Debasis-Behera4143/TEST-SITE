@@ -41,20 +41,35 @@ export const AuthProvider = ({ children }) => {
   // Load active session
   useEffect(() => {
     let authSubscription = null;
+    const fetchedUserIds = new Set();
+
     const initSession = async () => {
       if (isLiveMode && supabase) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          await fetchSupabaseProfile(session.user);
-        } else {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            fetchedUserIds.add(session.user.id);
+            await fetchSupabaseProfile(session.user);
+          } else {
+            loadMockSession();
+          }
+        } catch (e) {
+          console.error("Error getting session on load:", e);
           loadMockSession();
         }
 
         // Listen to auth state changes dynamically (critical for OAuth redirects!)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
           if (session?.user) {
-            await fetchSupabaseProfile(session.user);
+            const userId = session.user.id;
+            if (!fetchedUserIds.has(userId)) {
+              fetchedUserIds.add(userId);
+              setLoading(true);
+              await fetchSupabaseProfile(session.user);
+              setLoading(false);
+            }
           } else if (event === 'SIGNED_OUT') {
+            fetchedUserIds.clear();
             setUser(null);
             setStudent(null);
             setParent(null);

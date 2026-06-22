@@ -1,5 +1,5 @@
 import React, { useEffect, lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
@@ -13,14 +13,23 @@ const EvaluationModule = lazy(() => import('./pages/EvaluationModule'));
 
 // Inner component to access context for DeveloperMailCenter theme syncing
 const AppContent = () => {
-  const { theme, needsOnboarding } = useAuth();
+  const { theme, needsOnboarding, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (needsOnboarding) {
-      navigate('/login');
+      if (location.pathname !== '/login') {
+        navigate('/login');
+      }
+    } else if (user && (location.pathname === '/' || location.pathname === '/login')) {
+      if (user.role === 'student') {
+        navigate('/student-dashboard');
+      } else if (user.role === 'teacher' || user.role === 'admin') {
+        navigate('/teacher-dashboard');
+      }
     }
-  }, [needsOnboarding, navigate]);
+  }, [needsOnboarding, user, location.pathname, navigate]);
 
   return (
     <div className={`theme-transition min-h-screen flex flex-col justify-between`}>

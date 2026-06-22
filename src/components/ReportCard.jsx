@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { Download, Printer } from 'lucide-react';
+import { useRef } from 'react';
+import { Printer } from 'lucide-react';
 
 const gradeColor = (grade) => {
   if (!grade) return '#94a3b8';
@@ -10,7 +10,7 @@ const gradeColor = (grade) => {
   return '#f87171';
 };
 
-export const ReportCard = ({ result, submission, test, student, user }) => {
+export const ReportCard = ({ result, test, student, user }) => {
   const printRef = useRef(null);
 
   if (!result || !test || !user) return null;
@@ -25,27 +25,45 @@ export const ReportCard = ({ result, submission, test, student, user }) => {
   }) : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
 
   const handlePrint = () => {
-    const printContent = printRef.current;
-    const originalBody = document.body.innerHTML;
-    document.body.innerHTML = printContent.outerHTML;
     window.print();
-    document.body.innerHTML = originalBody;
-    window.location.reload();
   };
 
   return (
     <>
+      <style>{`
+        #report-card-print {
+          display: none;
+        }
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #report-card-print, #report-card-print * {
+            visibility: visible;
+          }
+          #report-card-print {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            display: block !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+        }
+      `}</style>
+
       {/* Print Trigger Button */}
       <button
         onClick={handlePrint}
         className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-brand-purple to-brand-cyan text-white text-xs font-bold shadow-md hover:shadow-brand-cyan/20 transition-all"
       >
-        <Download className="h-4 w-4" />
-        Download Report Card PDF
+        <Printer className="h-4 w-4" />
+        Print Report Card
       </button>
 
       {/* Hidden Print Template */}
-      <div ref={printRef} id="report-card-print" style={{ display: 'none' }}>
+      <div ref={printRef} id="report-card-print">
         <div style={{
           fontFamily: "'Segoe UI', Arial, sans-serif",
           maxWidth: '700px',

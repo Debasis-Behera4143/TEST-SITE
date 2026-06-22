@@ -2,9 +2,11 @@ import React, { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import LandingPage from './pages/LandingPage';
-import Login from './pages/Login';
 import DeveloperMailCenter from './components/DeveloperMailCenter';
+
+// Lazy load public components
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const Login = lazy(() => import('./pages/Login'));
 
 // Lazy load secure components
 const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));

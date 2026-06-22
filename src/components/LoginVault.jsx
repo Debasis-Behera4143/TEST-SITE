@@ -6,6 +6,14 @@ export const LoginVault = ({ animationType = 'cricket', onExplode }) => {
   const [phase, setPhase] = useState('locked'); // 'locked' | 'animating' | 'exploding' | 'done'
 
   useEffect(() => {
+    // Immediately explode and bypass the 3D WebGL sequence on mobile
+    const isMobile = window.innerWidth < 768;
+    if (isMobile) {
+      console.log("[EduTrack AI]: Mobile screen detected, skipping 3D vault break animation.");
+      onExplode();
+      return;
+    }
+
     if (!mountRef.current) return;
 
     // 1. Scene setup

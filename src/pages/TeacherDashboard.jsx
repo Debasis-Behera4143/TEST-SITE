@@ -1,22 +1,19 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { mockDb } from '../database/mockDb';
 import { supabase, isLiveMode } from '../database/supabaseClient';
-import DashboardHeader from '../components/DashboardHeader';
 import NotificationBell from '../components/NotificationBell';
-import { EmptyState, Skeleton } from '../components/ui';
+import { EmptyState } from '../components/ui';
 import ResultModal from '../components/ResultModal';
 import {
   LayoutDashboard, Plus, BookOpen, FileText, ClipboardList, CheckCircle2,
-  Users, BarChart2, Settings, Menu, X, Upload, Calendar, Clock, Trash2,
-  Edit, Download, Search, Sparkles, ChevronRight, Award, Eye, AlertTriangle,
-  RefreshCw, CheckSquare, LogOut, EyeOff, ShieldCheck
+  Users, BarChart2, Settings, Menu, X, Calendar, Clock, Trash2,
+  Edit, Download, Search, Sparkles, ChevronRight, Award, Eye,
+  RefreshCw, LogOut, EyeOff, ShieldCheck
 } from 'lucide-react';
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
-  PieChart, Pie, Cell, LineChart, Line, Legend
-} from 'recharts';
+
+const TeacherCharts = lazy(() => import('../components/analytics/TeacherCharts'));
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -34,14 +31,7 @@ const NAV_ITEMS = [
 const SUBJECTS = ['Physics', 'Chemistry', 'Biology', 'Mathematics', 'English'];
 const GRADE_COLORS = ['#4ade80', '#22d3ee', '#facc15', '#fb923c', '#f87171', '#a78bfa'];
 
-const gradeLabel = (pct) => {
-  if (pct >= 90) return 'A+';
-  if (pct >= 80) return 'A';
-  if (pct >= 70) return 'B';
-  if (pct >= 60) return 'C';
-  if (pct >= 50) return 'D';
-  return 'F';
-};
+
 
 export const TeacherDashboard = () => {
   const navigate = useNavigate();
@@ -388,7 +378,7 @@ export const TeacherDashboard = () => {
               EduTrack <span className="text-brand-cyan">AI</span>
             </span>
           </div>
-          <button onClick={() => setSidebarOpen(false)} className={`lg:hidden p-1 text-slate-400 hover:text-slate-650 dark:hover:text-white`}>
+          <button onClick={() => setSidebarOpen(false)} aria-label="Close Navigation Menu" className={`lg:hidden p-2 text-slate-400 hover:text-slate-650 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-cyan/50`}>
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -447,7 +437,9 @@ export const TeacherDashboard = () => {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
-              className={`lg:hidden p-2 rounded-xl border text-slate-400 hover:text-slate-650 dark:hover:text-white ${
+              aria-label="Open Navigation Menu"
+              aria-expanded={sidebarOpen}
+              className={`lg:hidden p-3 rounded-xl border text-slate-400 hover:text-slate-650 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-cyan/50 ${
                 theme === 'dark' ? 'border-white/10' : 'border-slate-200'
               }`}
             >
@@ -566,7 +558,7 @@ export const TeacherDashboard = () => {
               )}
 
               <form onSubmit={handleTestSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Subject *</label>
                     <select value={testForm.subject} onChange={e => setTestForm(f => ({ ...f, subject: e.target.value }))}
@@ -603,7 +595,7 @@ export const TeacherDashboard = () => {
                     className={`w-full py-2.5 px-3 text-xs rounded-xl border resize-none ${theme === 'dark' ? 'border-white/10 bg-slate-900 text-slate-200' : 'border-slate-200 bg-white text-slate-800'}`} />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Deadline *</label>
                     <input type="datetime-local" required value={testForm.deadline}
@@ -915,63 +907,14 @@ export const TeacherDashboard = () => {
                   description="Charts and reports will appear once students submit tests and results are published."
                   iconColorClass="text-brand-purple border-brand-purple/20 bg-brand-purple/5" />
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Subject Averages */}
-                  <div className={`p-5 rounded-2xl border ${gc}`}>
-                    <h3 className="font-bold text-sm mb-4">Subject-wise Average Score (%)</h3>
-                    {analytics.subjectChartData.length === 0 ? (
-                      <p className="text-xs text-slate-500 text-center py-8">No result data available yet.</p>
-                    ) : (
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={analytics.subjectChartData}>
-                            <XAxis dataKey="subject" stroke="#64748b" fontSize={10} />
-                            <YAxis stroke="#64748b" fontSize={10} domain={[0, 100]} />
-                            <Tooltip contentStyle={{ background: '#0d0e18', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }} />
-                            <Bar dataKey="average" fill="#06b6d4" radius={[6, 6, 0, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
+                <Suspense fallback={
+                  <div className="py-20 text-center flex flex-col items-center justify-center">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-brand-cyan"></div>
+                    <p className="text-xs text-slate-400 mt-2 font-mono uppercase tracking-wider animate-pulse">Loading Analytics Reports...</p>
                   </div>
-
-                  {/* Grade Distribution */}
-                  <div className={`p-5 rounded-2xl border ${gc}`}>
-                    <h3 className="font-bold text-sm mb-4">Grade Distribution</h3>
-                    {analytics.gradeChartData.length === 0 ? (
-                      <p className="text-xs text-slate-500 text-center py-8">No graded results yet.</p>
-                    ) : (
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={analytics.gradeChartData} dataKey="count" nameKey="grade" cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={3}>
-                              {analytics.gradeChartData.map((entry, idx) => (
-                                <Cell key={idx} fill={GRADE_COLORS[idx % GRADE_COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <Tooltip contentStyle={{ background: '#0d0e18', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }} />
-                            <Legend verticalAlign="bottom" height={36} iconSize={10} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 7-Day Submission Trend */}
-                  <div className={`p-5 rounded-2xl border ${gc} md:col-span-2`}>
-                    <h3 className="font-bold text-sm mb-4">Submission Trend (Last 7 Days)</h3>
-                    <div className="h-48">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={analytics.trendData}>
-                          <XAxis dataKey="day" stroke="#64748b" fontSize={10} />
-                          <YAxis stroke="#64748b" fontSize={10} allowDecimals={false} />
-                          <Tooltip contentStyle={{ background: '#0d0e18', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }} />
-                          <Line type="monotone" dataKey="submissions" stroke="#a855f7" strokeWidth={2} dot={{ fill: '#a855f7', r: 4 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </div>
+                }>
+                  <TeacherCharts analytics={analytics} gc={gc} GRADE_COLORS={GRADE_COLORS} />
+                </Suspense>
               )}
             </div>
           )}
@@ -1141,7 +1084,7 @@ export const TeacherDashboard = () => {
                     )}
 
                     <form onSubmit={handleQSubmit} className="space-y-3.5 text-left">
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Subject *</label>
                           <select

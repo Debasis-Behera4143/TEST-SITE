@@ -7,6 +7,13 @@ export const ThreeBackground = ({ active = true }) => {
   useEffect(() => {
     if (!active || !mountRef.current) return;
 
+    // Early exit on mobile viewports to prevent WebGL overhead
+    const isMobile = window.innerWidth < 768;
+    if (isMobile) {
+      console.log("[EduTrack AI]: Mobile screen detected, bypassing 3D WebGL Background canvas.");
+      return;
+    }
+
     // 1. Scene setup
     const scene = new THREE.Scene();
 

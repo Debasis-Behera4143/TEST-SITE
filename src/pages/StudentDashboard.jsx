@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { mockDb } from '../database/mockDb';
 import { supabase, isLiveMode } from '../database/supabaseClient';
@@ -9,21 +9,29 @@ import { Button, Card, Modal, Input, Dropdown, Table, Notification, ChartContain
 import { 
   BookOpen, Award, CheckCircle, Clock, Calendar, Download, Upload, Eye, Trophy, Star, Sparkles, 
   Activity, ArrowUpRight, BarChart2, Bell, AlertTriangle, FileText, CheckCircle2, ChevronRight, LogOut, Flame,
-  ShieldCheck
+  ShieldCheck, Menu, X, LayoutDashboard
 } from 'lucide-react';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import confetti from 'canvas-confetti';
 
-// Subject Sandbox Canvas Widgets
-import PhysicsSandbox from '../components/subject-widgets/PhysicsSandbox';
-import ChemistrySandbox from '../components/subject-widgets/ChemistrySandbox';
-import BiologySandbox from '../components/subject-widgets/BiologySandbox';
-import MathSandbox from '../components/subject-widgets/MathSandbox';
-import EnglishSandbox from '../components/subject-widgets/EnglishSandbox';
+// Lazy-loaded analytics and sandboxes to reduce initial bundle size
+const StudentCharts = lazy(() => import('../components/analytics/StudentCharts'));
+const PhysicsSandbox = lazy(() => import('../components/subject-widgets/PhysicsSandbox'));
+const ChemistrySandbox = lazy(() => import('../components/subject-widgets/ChemistrySandbox'));
+const BiologySandbox = lazy(() => import('../components/subject-widgets/BiologySandbox'));
+const MathSandbox = lazy(() => import('../components/subject-widgets/MathSandbox'));
+const EnglishSandbox = lazy(() => import('../components/subject-widgets/EnglishSandbox'));
 
 // Notification & Milestones Animations
 import PaperPlaneNotification from '../components/PaperPlaneNotification';
 import RocketSubmission from '../components/RocketSubmission';
+
+const STUDENT_NAV_ITEMS = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'tests', label: 'My Exams', icon: BookOpen },
+  { id: 'analytics', label: 'Performance', icon: BarChart2 },
+  { id: 'museum', label: '3D Sandbox', icon: Trophy },
+  { id: 'achievements', label: 'Certificates', icon: Award },
+];
 
 export const renderMarkdown = (text) => {
   if (!text) return '<p class="text-slate-500 italic">No notes entered yet.</p>';
@@ -90,6 +98,7 @@ export const StudentDashboard = () => {
   
   // Dashboard Tabs: 'overview' | 'tests' | 'analytics' | 'museum' | 'achievements'
   const [activeTab, setActiveTab] = useState('overview');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Interactive Modals
   const [selectedResult, setSelectedResult] = useState(null);
@@ -664,7 +673,123 @@ export const StudentDashboard = () => {
   }
 
   return (
-    <div className="flex-grow flex flex-col justify-between p-6 max-w-7xl mx-auto w-full relative z-10 text-left">
+    <div className="flex min-h-screen relative z-10 w-full">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <aside className={`fixed top-0 left-0 h-full w-64 z-50 flex flex-col transition-transform duration-300 border-r
+        ${theme === 'dark' ? 'bg-slate-950/95 border-white/5' : 'bg-white/95 border-slate-200'}
+        backdrop-blur-xl
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        {/* Sidebar Logo */}
+        <div className={`flex items-center justify-between px-5 py-5 border-b ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-gradient-to-tr from-brand-purple to-brand-cyan">
+              <Award className="h-5 w-5 text-white" />
+            </div>
+            <span className="font-display font-extrabold text-lg bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent dark:from-white dark:to-slate-300">
+              EduTrack <span className="text-brand-cyan">AI</span>
+            </span>
+          </div>
+          <button onClick={() => setSidebarOpen(false)} aria-label="Close Navigation Menu" className="lg:hidden p-2 text-slate-400 hover:text-slate-650 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-cyan/50">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Student Profile Info summary in sidebar */}
+        <div className={`p-4 border-b ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
+          <div className="flex items-center gap-3">
+            <img src={user?.avatar_url || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(user?.name || 'student')}`} className="h-9 w-9 rounded-xl border border-white/10" alt="" />
+            <div className="min-w-0">
+              <p className="text-xs font-bold truncate text-slate-900 dark:text-white">{user?.name}</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Student Account</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Nav Items */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+          {STUDENT_NAV_ITEMS.map(item => {
+            const Icon = item.icon;
+            const active = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all ${
+                  active
+                    ? 'bg-gradient-to-r from-brand-purple/15 to-brand-cyan/10 text-slate-900 dark:text-white border border-slate-200 dark:border-white/10 shadow-sm'
+                    : theme === 'dark'
+                      ? 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+                }`}
+              >
+                <Icon className={`h-4.5 w-4.5 shrink-0 ${active ? 'text-brand-cyan' : ''}`} />
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Sidebar logout */}
+        <div className={`p-4 border-t ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
+          <button
+            onClick={logout}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all text-red-500 hover:bg-red-500/10 cursor-pointer"
+          >
+            <LogOut className="h-4.5 w-4.5 shrink-0 text-red-500" />
+            Sign Out
+          </button>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <div className="flex-grow lg:ml-64 flex flex-col min-h-screen">
+        
+        {/* Sticky Mobile Header */}
+        <div className={`sticky top-0 z-30 px-4 py-3 border-b flex items-center justify-between gap-4 lg:hidden
+          ${theme === 'dark' ? 'bg-slate-950/80 border-white/5 backdrop-blur-xl' : 'bg-white/80 border-slate-200 backdrop-blur-xl'}
+        `}>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open Navigation Menu"
+              aria-expanded={sidebarOpen}
+              className={`p-3 rounded-xl border text-slate-400 hover:text-slate-650 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-cyan/50 ${
+                theme === 'dark' ? 'border-white/10' : 'border-slate-200'
+              }`}
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <div>
+              <h1 className="font-display font-extrabold text-sm text-slate-900 dark:text-white">
+                {STUDENT_NAV_ITEMS.find(n => n.id === activeTab)?.label}
+              </h1>
+              <p className="text-[10px] text-slate-500">EduTrack AI Portal</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <NotificationBell userId={user?.id} theme={theme} />
+            <button
+              onClick={logout}
+              className={`p-3 rounded-xl border transition-all duration-300 cursor-pointer hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-500 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-red-500/50 ${
+                theme === 'dark' ? 'border-white/10 text-slate-400' : 'border-slate-200 text-slate-600'
+              }`}
+              title="Sign Out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Main Content Area */}
+        <main className="flex-grow p-4 sm:p-6 max-w-7xl mx-auto w-full relative z-10 text-left">
       
       {/* Paper Plane Flying Alert */}
       <PaperPlaneNotification 
@@ -753,12 +878,12 @@ export const StudentDashboard = () => {
       />
 
       {/* Tabs Switcher including Museum */}
-      <div className="flex bg-slate-950/20 p-1.5 rounded-2xl border border-white/5 mb-8 w-fit overflow-x-auto no-scrollbar">
+      <div className="flex lg:hidden bg-slate-950/20 p-1.5 rounded-2xl border border-white/5 mb-8 w-fit overflow-x-auto no-scrollbar">
         {['overview', 'tests', 'analytics', 'museum', 'achievements'].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-5 py-2.5 text-xs font-bold rounded-xl uppercase tracking-wider transition-all whitespace-nowrap ${
+            className={`px-5 py-3 text-xs font-bold rounded-xl uppercase tracking-wider transition-all whitespace-nowrap ${
               activeTab === tab
                 ? 'bg-slate-800 text-white shadow-md'
                 : 'text-slate-400 hover:text-slate-200'
@@ -1147,63 +1272,14 @@ export const StudentDashboard = () => {
       {/* Analytics Graphing Tab */}
       {activeTab === 'analytics' && (
         <div className="space-y-6 text-left">
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* Subject radar performance */}
-            <div className={`p-6 rounded-3xl border ${
-              theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
-            }`}>
-              <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
-                <Activity className="h-5 w-5 text-brand-cyan" />
-                Subject Competency Radar
-              </h3>
-              
-              <div className="h-72 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" radius="80%" data={performanceData}>
-                    <PolarGrid stroke="#334155" />
-                    <PolarAngleAxis dataKey="subject" stroke="#94a3b8" fontSize={11} />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#475569" fontSize={9} />
-                    <Radar name="Alex Johnson" dataKey="score" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.25} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
+          <Suspense fallback={
+            <div className="py-20 text-center flex flex-col items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-brand-cyan"></div>
+              <p className="text-xs text-slate-400 mt-2 font-mono uppercase tracking-wider animate-pulse">Loading Analytics Charts...</p>
             </div>
-
-            {/* Performance trends curve */}
-            <div className={`p-6 rounded-3xl border ${
-              theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
-            }`}>
-              <h3 className="font-display font-bold text-lg mb-4 flex items-center gap-2">
-                <BarChart2 className="h-5 w-5 text-brand-purple" />
-                Academic Growth Trend
-              </h3>
-
-              <div className="h-72 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={trendData}>
-                    <defs>
-                      <linearGradient id="mathGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#a855f7" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="physGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="name" stroke="#64748b" fontSize={10} />
-                    <YAxis stroke="#64748b" fontSize={10} />
-                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} />
-                    <Area type="monotone" dataKey="Mathematics" stroke="#a855f7" fillOpacity={1} fill="url(#mathGrad)" strokeWidth={2} />
-                    <Area type="monotone" dataKey="Physics" stroke="#06b6d4" fillOpacity={1} fill="url(#physGrad)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-          </div>
+          }>
+            <StudentCharts theme={theme} performanceData={performanceData} trendData={trendData} />
+          </Suspense>
 
           {/* Weak chapters and strong areas highlights */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1249,34 +1325,41 @@ export const StudentDashboard = () => {
 
       {/* 3D Science Museum Tab */}
       {activeTab === 'museum' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
-          
-          <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-            <h3 className="font-display font-extrabold text-base mb-2 text-brand-cyan">🌌 Physics Gravity Sandbox</h3>
-            <PhysicsSandbox theme={theme} />
+        <Suspense fallback={
+          <div className="py-20 text-center flex flex-col items-center justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-brand-purple"></div>
+            <p className="text-xs text-slate-400 mt-2 font-mono uppercase tracking-wider animate-pulse">Loading Sandbox Widgets...</p>
           </div>
+        }>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+            
+            <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+              <h3 className="font-display font-extrabold text-base mb-2 text-brand-cyan">🌌 Physics Gravity Sandbox</h3>
+              <PhysicsSandbox theme={theme} />
+            </div>
 
-          <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-            <h3 className="font-display font-extrabold text-base mb-2 text-brand-purple">🧪 Chemistry Atom Beaker</h3>
-            <ChemistrySandbox theme={theme} />
+            <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+              <h3 className="font-display font-extrabold text-base mb-2 text-brand-purple">🧪 Chemistry Atom Beaker</h3>
+              <ChemistrySandbox theme={theme} />
+            </div>
+
+            <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+              <h3 className="font-display font-extrabold text-base mb-2 text-brand-pink">🧬 Biology DNA & Firing Neurons</h3>
+              <BiologySandbox theme={theme} />
+            </div>
+
+            <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+              <h3 className="font-display font-extrabold text-base mb-2 text-yellow-400">📐 Math 3D rotating cubes</h3>
+              <MathSandbox theme={theme} />
+            </div>
+
+            <div className={`p-6 rounded-3xl border md:col-span-2 ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+              <h3 className="font-display font-extrabold text-base mb-2 text-indigo-400">📚 English Flying Letters sandbox</h3>
+              <EnglishSandbox theme={theme} />
+            </div>
+
           </div>
-
-          <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-            <h3 className="font-display font-extrabold text-base mb-2 text-brand-pink">🧬 Biology DNA & Firing Neurons</h3>
-            <BiologySandbox theme={theme} />
-          </div>
-
-          <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-            <h3 className="font-display font-extrabold text-base mb-2 text-yellow-400">📐 Math 3D rotating cubes</h3>
-            <MathSandbox theme={theme} />
-          </div>
-
-          <div className={`p-6 rounded-3xl border md:col-span-2 ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-            <h3 className="font-display font-extrabold text-base mb-2 text-indigo-400">📚 English Flying Letters sandbox</h3>
-            <EnglishSandbox theme={theme} />
-          </div>
-
-        </div>
+        </Suspense>
       )}
 
       {/* Achievements and Certificates Tab */}
@@ -1854,14 +1937,10 @@ export const StudentDashboard = () => {
         </div>
       )}
 
+        </main>
+      </div>
     </div>
   );
 };
-
-const X = ({ className }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-  </svg>
-);
 
 export default StudentDashboard;

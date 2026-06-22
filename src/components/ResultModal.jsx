@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Award, ChevronDown, ChevronUp, BookOpen, AlertTriangle, CheckCircle2, Target, Lightbulb, Calendar, Sparkles } from 'lucide-react';
 import ReportCard from './ReportCard';
 
@@ -14,22 +14,22 @@ const gradeConfig = (grade) => {
 const AccordionPanel = ({ icon: Icon, iconColor, title, children, theme, defaultOpen = false }) => {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className={`rounded-xl border overflow-hidden ${theme === 'dark' ? 'border-white/5' : 'border-black/5'}`}>
+    <div className={`rounded-xl border overflow-hidden ${theme === 'dark' ? 'border-white/5' : 'border-slate-200'}`}>
       <button
         onClick={() => setOpen(v => !v)}
         className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors ${
-          theme === 'dark' ? 'hover:bg-white/3' : 'hover:bg-black/3'
+          theme === 'dark' ? 'hover:bg-white/3 bg-slate-900/30' : 'hover:bg-slate-50 bg-slate-50/50'
         }`}
       >
         <div className="flex items-center gap-2.5">
           <Icon className={`h-4 w-4 ${iconColor}`} />
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-300">{title}</span>
+          <span className={`text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-350' : 'text-slate-700'}`}>{title}</span>
         </div>
         {open ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
       </button>
       {open && (
         <div className={`px-4 pb-4 pt-1 border-t text-xs leading-relaxed ${
-          theme === 'dark' ? 'border-white/5 text-slate-300' : 'border-black/5 text-slate-600'
+          theme === 'dark' ? 'border-white/5 text-slate-300' : 'border-slate-200 text-slate-600'
         }`}>
           {children}
         </div>
@@ -50,26 +50,30 @@ const ResultModal = ({ result, submission, test, student, user, theme, onClose }
   const barColor = percentage >= 80 ? '#4ade80' : percentage >= 60 ? '#22d3ee' : percentage >= 40 ? '#facc15' : '#f87171';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className={`w-full max-w-2xl rounded-3xl border shadow-2xl my-8 ${
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
+      <div className={`w-full max-w-2xl rounded-2xl sm:rounded-3xl border shadow-2xl my-4 sm:my-8 ${
         theme === 'dark'
           ? 'bg-slate-950 border-white/10'
           : 'bg-white border-slate-200'
       }`}>
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
+        <div className={`flex items-center justify-between px-6 py-5 border-b ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-gradient-to-tr from-brand-purple to-brand-cyan">
               <Award className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h2 className="font-display font-extrabold text-lg text-white">Result Details</h2>
+              <h2 className={`font-display font-extrabold text-lg ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Result Details</h2>
               <p className="text-xs text-slate-400 mt-0.5">{test.subject} — {test.title}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl border border-white/5 hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+            className={`p-2 rounded-xl border transition-colors ${
+              theme === 'dark'
+                ? 'border-white/5 hover:bg-white/5 text-slate-400 hover:text-white'
+                : 'border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-800'
+            }`}
           >
             <X className="h-5 w-5" />
           </button>
@@ -81,7 +85,7 @@ const ResultModal = ({ result, submission, test, student, user, theme, onClose }
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-xs text-slate-400 uppercase tracking-wider font-bold">Marks Obtained</p>
-                <p className="text-4xl font-extrabold font-display text-white mt-1">
+                <p className={`text-4xl font-extrabold font-display mt-1 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
                   {result.marks_obtained}
                   <span className="text-xl text-slate-500 font-normal"> / {test.total_marks}</span>
                 </p>

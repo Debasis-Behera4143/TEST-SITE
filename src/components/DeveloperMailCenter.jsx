@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, X, Trash2, ShieldAlert, CheckCircle, ExternalLink, Calendar } from 'lucide-react';
+import { Mail, X, Trash2, ShieldAlert, CheckCircle, ExternalLink, Calendar, GraduationCap } from 'lucide-react';
 import { mockDb } from '../database/mockDb';
 
 export const DeveloperMailCenter = ({ theme }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [emails, setEmails] = useState([]);
   const [selectedEmail, setSelectedEmail] = useState(null);
+  const [showDetailOnMobile, setShowDetailOnMobile] = useState(false);
 
   const fetchEmails = async () => {
     const list = await mockDb.getMockEmails();
@@ -23,6 +24,7 @@ export const DeveloperMailCenter = ({ theme }) => {
     await mockDb.clearMockEmails();
     setEmails([]);
     setSelectedEmail(null);
+    setShowDetailOnMobile(false);
   };
 
   return (
@@ -46,7 +48,7 @@ export const DeveloperMailCenter = ({ theme }) => {
       {/* Slide-out Sidebar Panel */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm transition-all duration-300">
-          <div className="absolute inset-0" onClick={() => setIsOpen(false)}></div>
+          <div className="absolute inset-0" onClick={() => { setIsOpen(false); setShowDetailOnMobile(false); }}></div>
           
           <div className={`relative w-full max-w-2xl h-full shadow-2xl flex flex-col border-l transition-all duration-300 ${
             theme === 'dark' 
@@ -75,7 +77,10 @@ export const DeveloperMailCenter = ({ theme }) => {
                   </button>
                 )}
                 <button
-                  onClick={() => setIsOpen(false)}
+                  onClick={() => {
+                    setIsOpen(false);
+                    setShowDetailOnMobile(false);
+                  }}
                   className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all"
                 >
                   <X className="h-4 w-4" />
@@ -86,7 +91,9 @@ export const DeveloperMailCenter = ({ theme }) => {
             {/* Main Area */}
             <div className="flex-grow flex overflow-hidden">
               {/* Emails List Sidebar */}
-              <div className="w-1/2 border-r border-white/5 overflow-y-auto p-4 space-y-3">
+              <div className={`w-full md:w-1/2 border-r border-white/5 overflow-y-auto p-4 space-y-3 ${
+                showDetailOnMobile ? 'hidden md:block' : 'block'
+              }`}>
                 {emails.length === 0 ? (
                   <div className="h-48 flex flex-col items-center justify-center text-center p-4">
                     <Mail className="h-8 w-8 text-slate-600 mb-2 stroke-1" />
@@ -97,7 +104,10 @@ export const DeveloperMailCenter = ({ theme }) => {
                   emails.map((email) => (
                     <div
                       key={email.id}
-                      onClick={() => setSelectedEmail(email)}
+                      onClick={() => {
+                        setSelectedEmail(email);
+                        setShowDetailOnMobile(true);
+                      }}
                       className={`p-3 rounded-xl border text-left cursor-pointer transition-all duration-200 ${
                         selectedEmail?.id === email.id
                           ? 'border-brand-cyan bg-brand-cyan/10 shadow-md'
@@ -120,9 +130,19 @@ export const DeveloperMailCenter = ({ theme }) => {
               </div>
 
               {/* Email Content Preview */}
-              <div className="w-1/2 overflow-y-auto p-6 bg-slate-950/40">
+              <div className={`w-full md:w-1/2 overflow-y-auto p-6 bg-slate-950/40 ${
+                showDetailOnMobile ? 'block' : 'hidden md:block'
+              }`}>
                 {selectedEmail ? (
                   <div className="space-y-4">
+                    {/* Mobile Back Button */}
+                    <button
+                      onClick={() => setShowDetailOnMobile(false)}
+                      className="md:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-xs font-semibold text-slate-400 hover:text-white mb-2"
+                    >
+                      &larr; Back to Inbox
+                    </button>
+
                     <div className="p-4 rounded-xl border border-white/5 bg-slate-900/60 text-xs space-y-1">
                       <p><span className="font-bold text-slate-400">Sent via:</span> Resend API Sandbox</p>
                       <p><span className="font-bold text-slate-400">Subject:</span> {selectedEmail.subject}</p>

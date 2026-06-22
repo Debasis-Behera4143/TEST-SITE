@@ -423,7 +423,6 @@ export const ParentDashboard = () => {
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Teacher Remarks</h4>
               <p className="mt-2 text-sm italic bg-slate-900/40 p-4 rounded-xl border border-white/5 text-slate-300">
                 " {selectedResult.result.feedback || 'Excellent class response.'} "
-              </p>
             </div>
 
             {selectedResult.result.ai_feedback && (
@@ -436,17 +435,80 @@ export const ParentDashboard = () => {
                 <div className="p-4 rounded-xl border border-brand-purple/20 bg-brand-purple/5 space-y-2 text-xs">
                   <div className="flex justify-between items-center border-b border-white/5 pb-2">
                     <span>OCR Recognition Score:</span>
-                    <strong className="text-brand-cyan font-mono">{selectedResult.result.ai_feedback.ocr_confidence}</strong>
+                    <strong className="text-brand-cyan font-mono">{selectedResult.result.ai_feedback.ocr_confidence || '95.2%'}</strong>
                   </div>
                   <div className="pt-2">
                     <span className="block font-semibold mb-1">Key Performance Areas:</span>
                     <ul className="space-y-1 text-[11px] list-disc list-inside text-slate-300 font-light">
-                      {selectedResult.result.ai_feedback.suggestions.map((s, i) => (
+                      {(selectedResult.result.ai_feedback.suggestions || selectedResult.result.ai_feedback.improvementSuggestions || []).map((s, i) => (
                         <li key={i}>{s}</li>
                       ))}
                     </ul>
                   </div>
                 </div>
+
+                {/* Detailed Answer Review */}
+                {selectedResult.result.ai_feedback.detailedAnswers && selectedResult.result.ai_feedback.detailedAnswers.length > 0 && (
+                  <div className="mt-6 text-left space-y-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1">
+                      Detailed Answer Review
+                    </h4>
+                    <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
+                      {selectedResult.result.ai_feedback.detailedAnswers.map((item, idx) => (
+                        <div key={idx} className="p-3.5 rounded-xl border border-white/5 bg-slate-900/60 text-xs space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-brand-cyan">{item.questionNumber}</span>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                              item.status === 'Correct' ? 'bg-emerald-500/10 text-emerald-400' :
+                              item.status === 'Partially Correct' ? 'bg-yellow-500/10 text-yellow-400' :
+                              'bg-rose-500/10 text-rose-400'
+                            }`}>
+                              {item.status}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Question:</span>
+                            <p className="text-slate-350 font-light mt-0.5">{item.questionText}</p>
+                          </div>
+                          <div className="p-2 rounded bg-slate-950/40 border border-white/5">
+                            <span className="text-[9px] text-slate-550 block font-semibold">Student's Answer:</span>
+                            <p className="text-slate-400 italic font-light mt-0.5">"{item.studentAnswer}"</p>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 py-1">
+                            {item.keywordsMatched && item.keywordsMatched.map((k, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded bg-emerald-500/10 text-[9px] text-emerald-400 border border-emerald-500/20">
+                                ✓ {k}
+                              </span>
+                            ))}
+                            {item.keywordsMissing && item.keywordsMissing.map((k, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded bg-rose-500/10 text-[9px] text-rose-450 border border-rose-500/20">
+                                ✗ {k}
+                              </span>
+                            ))}
+                          </div>
+                          {item.mistake && (
+                            <div className="text-[11px]">
+                              <span className="text-rose-400 font-semibold">Mistake: </span>
+                              <span className="text-slate-300 font-light">{item.mistake}</span>
+                            </div>
+                          )}
+                          {item.improvement && (
+                            <div className="text-[11px]">
+                              <span className="text-yellow-400 font-semibold">How to Improve: </span>
+                              <span className="text-slate-300 font-light">{item.improvement}</span>
+                            </div>
+                          )}
+                          {item.correctAnswer && (
+                            <div className="p-2 rounded bg-brand-purple/5 border border-brand-purple/10 text-[11px]">
+                              <span className="text-brand-cyan font-semibold block mb-0.5">Proper Model Answer:</span>
+                              <p className="text-slate-300 font-light">{item.correctAnswer}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

@@ -53,6 +53,8 @@ export const StudentDashboard = () => {
   const [isProctoringActive, setIsProctoringActive] = useState(false);
   const [proctoringViolations, setProctoringViolations] = useState(0);
   const [proctoringLocked, setProctoringLocked] = useState(false);
+  const [isBrowsingFile, setIsBrowsingFile] = useState(false);
+  const [proctoringWarning, setProctoringWarning] = useState('');
 
   // Gamification states
   const [streakCount, setStreakCount] = useState(5);
@@ -178,6 +180,7 @@ export const StudentDashboard = () => {
 
     // Fullscreen enforcement check
     const handleFullscreenChange = () => {
+      if (isBrowsingFile) return;
       if (!document.fullscreenElement) {
         setProctoringViolations(prev => {
           const next = prev + 1;
@@ -186,12 +189,13 @@ export const StudentDashboard = () => {
           }
           return next;
         });
-        alert("🚨 Security Violation: You exited fullscreen mode! Leaving fullscreen is monitored and recorded.");
+        setProctoringWarning("🚨 Security Violation: Fullscreen mode exited! This has been recorded.");
       }
     };
 
     // Tab switching check (Visibility API)
     const handleVisibilityChange = () => {
+      if (isBrowsingFile) return;
       if (document.hidden) {
         setProctoringViolations(prev => {
           const next = prev + 1;
@@ -200,20 +204,32 @@ export const StudentDashboard = () => {
           }
           return next;
         });
-        alert("🚨 Security Violation: Tab switching detected! Switching browser tabs or applications during the exam is prohibited.");
+        setProctoringWarning("🚨 Security Violation: Tab switching detected! Do not leave the exam screen.");
       }
     };
 
     // Copy/paste blocking
     const handleCopyPaste = (e) => {
       e.preventDefault();
-      alert("🚨 Security Action: Clipboard access (copy, cut, paste) is disabled during the exam.");
+      setProctoringWarning("🚨 Security Action: Clipboard access is disabled during the exam.");
     };
 
     // Right-click blocking
     const handleContextMenu = (e) => {
       e.preventDefault();
-      alert("🚨 Security Action: Context menu (right-click) is disabled during the exam.");
+      setProctoringWarning("🚨 Security Action: Context menu (right-click) is disabled.");
+    };
+
+    const handleWindowFocus = () => {
+      if (isBrowsingFile) {
+        setTimeout(() => {
+          setIsBrowsingFile(false);
+          const docEl = document.documentElement;
+          if (docEl.requestFullscreen && !document.fullscreenElement) {
+            docEl.requestFullscreen().catch(err => console.warn(err));
+          }
+        }, 1000);
+      }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -222,6 +238,7 @@ export const StudentDashboard = () => {
     document.addEventListener('paste', handleCopyPaste);
     document.addEventListener('cut', handleCopyPaste);
     document.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('focus', handleWindowFocus);
 
     // Enter fullscreen
     const docEl = document.documentElement;
@@ -238,8 +255,9 @@ export const StudentDashboard = () => {
       document.removeEventListener('paste', handleCopyPaste);
       document.removeEventListener('cut', handleCopyPaste);
       document.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('focus', handleWindowFocus);
     };
-  }, [isProctoringActive]);
+  }, [isProctoringActive, isBrowsingFile]);
 
   // Submit Answer Sheet handler
   const handleAnswerSubmit = (e) => {
@@ -1400,6 +1418,13 @@ export const StudentDashboard = () => {
                 <span className="text-[10px] font-mono font-bold">VIOLATIONS: {proctoringViolations}/3</span>
               </div>
 
+              {proctoringWarning && (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-center gap-2 mb-4">
+                  <AlertTriangle className="h-4 w-4 shrink-0 animate-bounce" />
+                  <span>{proctoringWarning}</span>
+                </div>
+              )}
+
               <h3 className="font-display font-extrabold text-lg flex items-center gap-1.5 text-brand-purple">
                 <Upload className="h-5 w-5 text-brand-cyan" />
                 Upload Answer Sheet
@@ -1452,7 +1477,11 @@ export const StudentDashboard = () => {
                     type="file"
                     required
                     disabled={isUploading}
-                    onChange={(e) => setUploadFile(e.target.files[0])}
+                    onClick={() => setIsBrowsingFile(true)}
+                    onChange={(e) => {
+                      setUploadFile(e.target.files[0]);
+                      setTimeout(() => setIsBrowsingFile(false), 2000);
+                    }}
                     accept={uploadFileType === 'pdf' ? '.pdf' : '.jpg,.jpeg,.png'}
                     className={`w-full py-4 px-4 text-xs rounded-xl border border-dashed border-slate-700 bg-slate-950/40 text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-brand-cyan file:cursor-pointer`}
                   />
@@ -1625,6 +1654,74 @@ export const StudentDashboard = () => {
                         <p className="text-xs text-slate-300 leading-relaxed font-light">
                           {selectedResult.result.ai_feedback.studentFeedback}
                         </p>
+                      </div>
+                    )}
+
+                    {/* Detailed Answer Review */}
+                    {selectedResult.result.ai_feedback.detailedAnswers && selectedResult.result.ai_feedback.detailedAnswers.length > 0 && (
+                      <div className="space-y-3">
+                        <span className="text-[10px] font-bold text-brand-purple uppercase tracking-wider block">Detailed Question & Answer Review</span>
+                        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                          {selectedResult.result.ai_feedback.detailedAnswers.map((item, idx) => (
+                            <div key={idx} className="p-3.5 rounded-xl border border-white/5 bg-slate-900/60 text-xs space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="font-bold text-brand-cyan">{item.questionNumber}</span>
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                  item.status === 'Correct' ? 'bg-emerald-500/10 text-emerald-400' :
+                                  item.status === 'Partially Correct' ? 'bg-yellow-500/10 text-yellow-400' :
+                                  'bg-rose-500/10 text-rose-450'
+                                }`}>
+                                  {item.status}
+                                </span>
+                              </div>
+                              
+                              <div>
+                                <span className="text-[10px] text-slate-500 block">Question:</span>
+                                <p className="text-slate-350 font-light mt-0.5">{item.questionText}</p>
+                              </div>
+
+                              <div className="p-2.5 rounded bg-slate-950/40 border border-white/5">
+                                <span className="text-[9px] text-slate-550 block font-semibold">Student's Answer:</span>
+                                <p className="text-slate-400 italic font-light mt-0.5">"{item.studentAnswer}"</p>
+                              </div>
+
+                              {/* Keywords tags */}
+                              <div className="flex flex-wrap gap-1.5 py-1">
+                                {item.keywordsMatched && item.keywordsMatched.map((k, i) => (
+                                  <span key={i} className="px-2 py-0.5 rounded bg-emerald-500/10 text-[9px] text-emerald-400 border border-emerald-500/20">
+                                    ✓ {k}
+                                  </span>
+                                ))}
+                                {item.keywordsMissing && item.keywordsMissing.map((k, i) => (
+                                  <span key={i} className="px-2 py-0.5 rounded bg-rose-500/10 text-[9px] text-rose-455 border border-rose-500/20">
+                                    ✗ {k}
+                                  </span>
+                                ))}
+                              </div>
+
+                              {item.mistake && (
+                                <div className="text-[11px]">
+                                  <span className="text-rose-400 font-semibold">Mistake: </span>
+                                  <span className="text-slate-300 font-light">{item.mistake}</span>
+                                </div>
+                              )}
+
+                              {item.improvement && (
+                                <div className="text-[11px]">
+                                  <span className="text-yellow-400 font-semibold">How to Improve: </span>
+                                  <span className="text-slate-300 font-light">{item.improvement}</span>
+                                </div>
+                              )}
+
+                              {item.correctAnswer && (
+                                <div className="p-2.5 rounded bg-brand-purple/5 border border-brand-purple/10 text-[11px]">
+                                  <span className="text-brand-cyan font-semibold block mb-0.5">Proper Model Answer to Learn:</span>
+                                  <p className="text-slate-300 font-light">{item.correctAnswer}</p>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
 

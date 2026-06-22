@@ -20,6 +20,28 @@ const gradeFromPct = (pct) => {
   return 'F';
 };
 
+const fetchFileAsBase64 = async (url) => {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result.split(',')[1];
+        resolve({
+          base64: base64String,
+          mimeType: blob.type
+        });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (err) {
+    console.warn("Failed to fetch file as base64:", err);
+    return null;
+  }
+};
+
 export const EvaluationModule = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -123,7 +145,7 @@ export const EvaluationModule = () => {
     }
   };
 
-  // â”€â”€â”€ PUBLISH RESULT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——— PUBLISH RESULT ——————————————————————————————
   const handlePublish = async (e) => {
     e.preventDefault();
     if (!marks || isNaN(marks)) { setStatusMsg('Please enter valid marks.'); setStatusType('error'); return; }
@@ -138,18 +160,32 @@ export const EvaluationModule = () => {
     }
 
     setPublishing(true);
-    setStatusMsg('Generating AI feedback via Geminiâ€¦');
+    setStatusMsg('Generating AI feedback via Gemini…');
     setStatusType('info');
 
     try {
       // 1. Generate AI feedback
       let aiFeedback = null;
       try {
+        let studentAnswerFile = null;
+        if (fileUrl && fileUrl.startsWith('http')) {
+          setStatusMsg('Reading student answer sheet...');
+          studentAnswerFile = await fetchFileAsBase64(fileUrl);
+        }
+        let questionPaperFile = null;
+        if (test?.question_paper_url && test.question_paper_url.startsWith('http')) {
+          setStatusMsg('Reading test question paper...');
+          questionPaperFile = await fetchFileAsBase64(test.question_paper_url);
+        }
+
+        setStatusMsg('Generating AI feedback via Gemini…');
         aiFeedback = await generateAIEvaluationFeedback({
           subject: test.subject,
           marks: marksNum,
           totalMarks,
-          teacherRemarks
+          teacherRemarks,
+          studentAnswerFile,
+          questionPaperFile
         });
       } catch (aiErr) {
         console.warn('Gemini feedback failed, continuing without:', aiErr);
@@ -176,18 +212,34 @@ export const EvaluationModule = () => {
     }
   };
 
-  // â”€â”€â”€ AI PRE-ANALYSIS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——— AI PRE-ANALYSIS ——————————————————————————————
   const runAIAnalysis = async () => {
     if (!test) return;
     setAiRunning(true);
-    setStatusMsg('');
+    setStatusMsg('Checking answers via Gemini...');
+    setStatusType('info');
     try {
       const currentMarks = marks || Math.round((test.total_marks || 40) * 0.80);
+      
+      let studentAnswerFile = null;
+      if (fileUrl && fileUrl.startsWith('http')) {
+        setStatusMsg('Reading student answer sheet...');
+        studentAnswerFile = await fetchFileAsBase64(fileUrl);
+      }
+      let questionPaperFile = null;
+      if (test?.question_paper_url && test.question_paper_url.startsWith('http')) {
+        setStatusMsg('Reading test question paper...');
+        questionPaperFile = await fetchFileAsBase64(test.question_paper_url);
+      }
+
+      setStatusMsg('Checking answers via Gemini...');
       const feedback = await generateAIEvaluationFeedback({
         subject: test.subject,
         marks: parseFloat(currentMarks),
         totalMarks: test.total_marks,
-        teacherRemarks: teacherRemarks || 'Evaluated by teacher.'
+        teacherRemarks: teacherRemarks || 'Evaluated by teacher.',
+        studentAnswerFile,
+        questionPaperFile
       });
       setAiResult(feedback);
       if (!marks) setMarks(currentMarks);
@@ -390,18 +442,87 @@ export const EvaluationModule = () => {
             </div>
 
             {aiResult && (
-              <div className="mt-4 pt-4 border-t border-white/5 space-y-3 text-xs">
+              <div className="mt-4 pt-4 border-t border-white/5 space-y-4 text-xs text-left">
                 {aiResult.studentFeedback && (
                   <div>
                     <span className="block text-[10px] font-bold text-brand-cyan uppercase tracking-wider mb-1">Student Feedback</span>
-                    <p className="text-slate-300 leading-relaxed text-[11px]">{aiResult.studentFeedback}</p>
+                    <p className="text-slate-350 leading-relaxed font-light">{aiResult.studentFeedback}</p>
                   </div>
                 )}
+
+                {/* Detailed Answer Review */}
+                {aiResult.detailedAnswers && aiResult.detailedAnswers.length > 0 && (
+                  <div className="space-y-3">
+                    <span className="block text-[10px] font-bold text-brand-purple uppercase tracking-wider">Detailed Q&A Audit</span>
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                      {aiResult.detailedAnswers.map((item, idx) => (
+                        <div key={idx} className="p-3.5 rounded-xl border border-white/5 bg-slate-950/40 text-xs space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-brand-cyan">{item.questionNumber}</span>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                              item.status === 'Correct' ? 'bg-emerald-500/10 text-emerald-400' :
+                              item.status === 'Partially Correct' ? 'bg-yellow-500/10 text-yellow-400' :
+                              'bg-rose-500/10 text-rose-450'
+                            }`}>
+                              {item.status}
+                            </span>
+                          </div>
+                          
+                          <div>
+                            <span className="text-[10px] text-slate-500 block font-semibold">Question:</span>
+                            <p className="text-slate-300 font-light mt-0.5">{item.questionText}</p>
+                          </div>
+
+                          <div className="p-2.5 rounded bg-slate-900/40 border border-white/5">
+                            <span className="text-[9px] text-slate-500 block font-semibold">Student's Answer:</span>
+                            <p className="text-slate-400 italic font-light mt-0.5">"{item.studentAnswer}"</p>
+                          </div>
+
+                          {/* Keywords tags */}
+                          <div className="flex flex-wrap gap-1.5 py-1">
+                            {item.keywordsMatched && item.keywordsMatched.map((k, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded bg-emerald-500/10 text-[9px] text-emerald-400 border border-emerald-500/20">
+                                ✓ {k}
+                              </span>
+                            ))}
+                            {item.keywordsMissing && item.keywordsMissing.map((k, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded bg-rose-500/10 text-[9px] text-rose-450 border border-rose-500/20">
+                                ✗ {k}
+                              </span>
+                            ))}
+                          </div>
+
+                          {item.mistake && (
+                            <div className="text-[11px]">
+                              <span className="text-rose-450 font-semibold">Mistake: </span>
+                              <span className="text-slate-350 font-light">{item.mistake}</span>
+                            </div>
+                          )}
+
+                          {item.improvement && (
+                            <div className="text-[11px]">
+                              <span className="text-yellow-400 font-semibold">Improvement: </span>
+                              <span className="text-slate-350 font-light">{item.improvement}</span>
+                            </div>
+                          )}
+
+                          {item.correctAnswer && (
+                            <div className="p-2.5 rounded bg-brand-purple/5 border border-brand-purple/10 text-[11px]">
+                              <span className="text-brand-cyan font-semibold block mb-0.5">Proper Answer Model:</span>
+                              <p className="text-slate-300 font-light">{item.correctAnswer}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {aiResult.strengths?.length > 0 && (
                   <div>
                     <span className="block text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1">Strengths</span>
                     <ul className="space-y-1">
-                      {aiResult.strengths.map((s, i) => <li key={i} className="text-[11px] text-slate-300 flex gap-1.5"><span className="text-emerald-400">â€¢</span>{s}</li>)}
+                      {aiResult.strengths.map((s, i) => <li key={i} className="text-[11px] text-slate-350 flex gap-1.5"><span className="text-emerald-400">•</span>{s}</li>)}
                     </ul>
                   </div>
                 )}
@@ -409,7 +530,7 @@ export const EvaluationModule = () => {
                   <div>
                     <span className="block text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1">Focus Areas</span>
                     <ul className="space-y-1">
-                      {aiResult.weakAreas.map((w, i) => <li key={i} className="text-[11px] text-slate-300 flex gap-1.5"><span className="text-red-400">!</span>{w}</li>)}
+                      {aiResult.weakAreas.map((w, i) => <li key={i} className="text-[11px] text-slate-355 flex gap-1.5"><span className="text-red-400">!</span>{w}</li>)}
                     </ul>
                   </div>
                 )}

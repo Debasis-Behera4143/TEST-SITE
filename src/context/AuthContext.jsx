@@ -153,16 +153,18 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password, regNumber = null) => {
     setLoading(true);
+    const cleanEmail = email ? email.trim() : '';
+    const cleanReg = regNumber ? regNumber.trim() : null;
     try {
-      if (isLiveMode && supabase && !regNumber) {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (isLiveMode && supabase && !cleanReg) {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
         if (error) throw error;
         await fetchSupabaseProfile(data.user);
         setLoading(false);
         return { error: null };
       } else {
         // Mock DB login
-        const { data, error } = await mockDb.login(email, password, regNumber);
+        const { data, error } = await mockDb.login(cleanEmail, password, cleanReg);
         if (error) throw new Error(error);
 
         setUser(data.user);
@@ -182,18 +184,20 @@ export const AuthProvider = ({ children }) => {
 
   const signup = async (name, email, password, role, extra = {}) => {
     setLoading(true);
+    const cleanEmail = email ? email.trim() : '';
+    const cleanName = name ? name.trim() : '';
     try {
       if (isLiveMode && supabase) {
-        const { data, error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({ email: cleanEmail, password });
         if (error) throw error;
         
         // Insert profile details in Supabase
         await insertUserProfile({
           id: data.user.id,
-          name,
-          email,
+          name: cleanName,
+          email: cleanEmail,
           role,
-          avatar_url: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`
+          avatar_url: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(cleanName)}`
         });
 
         if (role === 'student') {

@@ -9,27 +9,16 @@ import { Skeleton, EmptyState } from '../components/ui';
 import { 
   BookOpen, Award, CheckCircle, Clock, Calendar, Download, Upload, Eye, Trophy, Star, Sparkles, 
   BarChart2, AlertTriangle, FileText, CheckCircle2, LogOut, Flame,
-  ShieldCheck, Menu, X, LayoutDashboard
+  Menu, X, LayoutDashboard
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 
-// Lazy-loaded analytics and sandboxes to reduce initial bundle size
+// Lazy-loaded analytics
 const StudentCharts = lazy(() => import('../components/analytics/StudentCharts'));
-const PhysicsSandbox = lazy(() => import('../components/subject-widgets/PhysicsSandbox'));
-const ChemistrySandbox = lazy(() => import('../components/subject-widgets/ChemistrySandbox'));
-const BiologySandbox = lazy(() => import('../components/subject-widgets/BiologySandbox'));
-const MathSandbox = lazy(() => import('../components/subject-widgets/MathSandbox'));
-const EnglishSandbox = lazy(() => import('../components/subject-widgets/EnglishSandbox'));
-
-// Notification & Milestones Animations
-import PaperPlaneNotification from '../components/PaperPlaneNotification';
-import RocketSubmission from '../components/RocketSubmission';
 
 const STUDENT_NAV_ITEMS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'tests', label: 'My Exams', icon: BookOpen },
   { id: 'analytics', label: 'Performance', icon: BarChart2 },
-  { id: 'museum', label: '3D Sandbox', icon: Trophy },
   { id: 'achievements', label: 'Certificates', icon: Award },
 ];
 
@@ -67,10 +56,10 @@ const renderMarkdown = (text) => {
   html = html.replace(/^---$/gm, '<hr class="border-white/10 my-4" />');
 
   // Bullet Lists: - item or * item
-  html = html.replace(/^\s*[-*]\s+(.*?)$/gm, '<li class="ml-4 list-disc text-slate-350 my-1 leading-relaxed">$1</li>');
+  html = html.replace(/^\s*[-*]\s+(.*?)$/gm, '<li class="ml-4 list-disc text-slate-400 my-1 leading-relaxed">$1</li>');
 
   // Numbered Lists: 1. item
-  html = html.replace(/^\s*\d+\.\s+(.*?)$/gm, '<li class="ml-4 list-decimal text-slate-350 my-1 leading-relaxed">$1</li>');
+  html = html.replace(/^\s*\d+\.\s+(.*?)$/gm, '<li class="ml-4 list-decimal text-slate-400 my-1 leading-relaxed">$1</li>');
 
   // Process paragraphs
   const lines = html.split('\n');
@@ -80,10 +69,58 @@ const renderMarkdown = (text) => {
     if (trimmed.startsWith('<h') || trimmed.startsWith('<li') || trimmed.startsWith('<pre') || trimmed.startsWith('</pre') || trimmed.startsWith('<hr') || trimmed.startsWith('<p') || trimmed.startsWith('</p')) {
       return line;
     }
-    return `<p class="my-2 text-slate-350 leading-relaxed font-light text-xs">${line}</p>`;
+    return `<p class="my-2 text-slate-400 leading-relaxed font-light text-xs">${line}</p>`;
   });
   
   return processedLines.join('\n');
+};
+
+// Self-contained component to run count-up animation locally
+// to prevent dashboard-wide re-renders during the animation.
+const ScorecardGrid = ({ marksObtained, totalMarks, grade }) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let start = 0;
+    const end = Number(marksObtained) || 0;
+    if (end <= 0) {
+      setTimeout(() => setCount(0), 0);
+      return;
+    }
+    const stepVal = Math.max(1, end / 30);
+    const timer = setInterval(() => {
+      start += stepVal;
+      if (start >= end) {
+        setCount(end);
+        clearInterval(timer);
+      } else {
+        setCount(Math.round(start));
+      }
+    }, 25);
+    return () => clearInterval(timer);
+  }, [marksObtained]);
+
+  const percentage = Math.round((count / totalMarks) * 100) || 0;
+
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-6">
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-900/60 text-center border border-white/5">
+        <span className="block text-[9px] uppercase tracking-wider text-slate-500">Marks Obtained</span>
+        <span className="text-lg sm:text-xl font-extrabold text-brand-cyan">{count}</span>
+        <span className="text-[10px] text-slate-500 block mt-0.5">/ {totalMarks}</span>
+      </div>
+
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-900/60 text-center border border-white/5">
+        <span className="block text-[9px] uppercase tracking-wider text-slate-500">Percentage</span>
+        <span className="text-lg sm:text-xl font-extrabold text-brand-cyan">{percentage}%</span>
+      </div>
+
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-900/60 text-center border border-white/5">
+        <span className="block text-[9px] uppercase tracking-wider text-slate-500">Grade Letter</span>
+        <span className="text-lg sm:text-xl font-extrabold text-emerald-400 font-display">{grade}</span>
+      </div>
+    </div>
+  );
 };
 
 export const StudentDashboard = () => {
@@ -95,10 +132,9 @@ export const StudentDashboard = () => {
   const [badges, setBadges] = useState([]);
   const [certificates, setCertificates] = useState([]);
   
-  // Dashboard Tabs: 'overview' | 'tests' | 'analytics' | 'museum' | 'achievements'
+  // Dashboard Tabs: 'overview' | 'tests' | 'analytics' | 'achievements'
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeSandbox, setActiveSandbox] = useState('physics');
 
   // Interactive Modals
   const [selectedResult, setSelectedResult] = useState(null);
@@ -108,28 +144,11 @@ export const StudentDashboard = () => {
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploadProgress, setUploadProgress] = useState(null);
   const [uploadError, setUploadError] = useState(null);
-  const [simulateNetworkDrop, setSimulateNetworkDrop] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-
-  // Proctoring states
-  const [isProctoringActive, setIsProctoringActive] = useState(false);
-  const [proctoringViolations, setProctoringViolations] = useState(0);
-  const [proctoringLocked, setProctoringLocked] = useState(false);
-  const [isBrowsingFile, setIsBrowsingFile] = useState(false);
-  const [proctoringWarning, setProctoringWarning] = useState('');
 
   // Gamification states
   const [streakCount, setStreakCount] = useState(5);
-  const [planeTrigger, setPlaneTrigger] = useState(false);
-  const [rocketTrigger, setRocketTrigger] = useState(false);
-
-  // Result Vault States
-  const [vaultOpened, setVaultOpened] = useState(false);
-  const [countUpMarks, setCountUpMarks] = useState(0);
   const [dataLoading, setDataLoading] = useState(true);
-
-  // Easter Eggs Alert
-  const [eggMsg, setEggMsg] = useState('');
 
   // Load data
   const loadDashboardData = useCallback(async () => {
@@ -204,120 +223,22 @@ export const StudentDashboard = () => {
       loadDashboardData();
     }, 0);
 
-    // Trigger paper plane notification on initial entrance
-    const planeTimer = setTimeout(() => {
-      setPlaneTrigger(true);
-    }, 2500);
-
     return () => {
       clearTimeout(timer);
-      clearTimeout(planeTimer);
     };
   }, [loadDashboardData]);
 
-  // Count up animation inside result vault
+  // Lock background scroll when modal is active
   useEffect(() => {
-    if (selectedResult && vaultOpened) {
-      let current = 0;
-      const target = selectedResult.result.marks_obtained;
-      const stepVal = Math.max(1, target / 30);
-      const timer = setInterval(() => {
-        current += stepVal;
-        if (current >= target) {
-          setCountUpMarks(target);
-          clearInterval(timer);
-        } else {
-          setCountUpMarks(Math.round(current));
-        }
-      }, 25);
-      return () => clearInterval(timer);
+    if (selectedResult || selectedTestToSubmit) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
-  }, [selectedResult, vaultOpened]);
-
-  // Exam Proctoring & Integrity listener
-  useEffect(() => {
-    if (!isProctoringActive) return;
-
-    // Fullscreen enforcement check
-    const handleFullscreenChange = () => {
-      if (isBrowsingFile) return;
-      if (!document.fullscreenElement) {
-        setProctoringViolations(prev => {
-          const next = prev + 1;
-          if (next >= 3) {
-            setProctoringLocked(true);
-          }
-          return next;
-        });
-        setProctoringWarning("🚨 Security Violation: Fullscreen mode exited! This has been recorded.");
-      }
-    };
-
-    // Tab switching check (Visibility API)
-    const handleVisibilityChange = () => {
-      if (isBrowsingFile) return;
-      if (document.hidden) {
-        setProctoringViolations(prev => {
-          const next = prev + 1;
-          if (next >= 3) {
-            setProctoringLocked(true);
-          }
-          return next;
-        });
-        setProctoringWarning("🚨 Security Violation: Tab switching detected! Do not leave the exam screen.");
-      }
-    };
-
-    // Copy/paste blocking
-    const handleCopyPaste = (e) => {
-      e.preventDefault();
-      setProctoringWarning("🚨 Security Action: Clipboard access is disabled during the exam.");
-    };
-
-    // Right-click blocking
-    const handleContextMenu = (e) => {
-      e.preventDefault();
-      setProctoringWarning("🚨 Security Action: Context menu (right-click) is disabled.");
-    };
-
-    const handleWindowFocus = () => {
-      if (isBrowsingFile) {
-        setTimeout(() => {
-          setIsBrowsingFile(false);
-          const docEl = document.documentElement;
-          if (docEl.requestFullscreen && !document.fullscreenElement) {
-            docEl.requestFullscreen().catch(err => console.warn(err));
-          }
-        }, 1000);
-      }
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    document.addEventListener('copy', handleCopyPaste);
-    document.addEventListener('paste', handleCopyPaste);
-    document.addEventListener('cut', handleCopyPaste);
-    document.addEventListener('contextmenu', handleContextMenu);
-    window.addEventListener('focus', handleWindowFocus);
-
-    // Enter fullscreen
-    const docEl = document.documentElement;
-    if (docEl.requestFullscreen) {
-      docEl.requestFullscreen().catch(err => {
-        console.warn("Fullscreen request failed:", err);
-      });
-    }
-
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      document.removeEventListener('copy', handleCopyPaste);
-      document.removeEventListener('paste', handleCopyPaste);
-      document.removeEventListener('cut', handleCopyPaste);
-      document.removeEventListener('contextmenu', handleContextMenu);
-      window.removeEventListener('focus', handleWindowFocus);
+      document.body.style.overflow = '';
     };
-  }, [isProctoringActive, isBrowsingFile]);
+  }, [selectedResult, selectedTestToSubmit]);
 
   // Submit Answer Sheet handler
   const handleAnswerSubmit = (e) => {
@@ -336,14 +257,6 @@ export const StudentDashboard = () => {
     const interval = setInterval(async () => {
       progress += 10;
       setUploadProgress(progress);
-
-      if (progress === 60 && simulateNetworkDrop) {
-        clearInterval(interval);
-        setIsUploading(false);
-        setUploadError("Network Connection Timeout: Transmit payload failed due to simulated network drop.");
-        setUploadStatus("Upload failed.");
-        return;
-      }
 
       if (progress >= 100) {
         clearInterval(interval);
@@ -369,19 +282,10 @@ export const StudentDashboard = () => {
           
           const encryptedUrl = `e2ee:${encryptPayload(fileUrl)}`;
           await mockDb.addSubmission(selectedTestToSubmit.id, user.id, encryptedUrl, uploadFileType);
-          setUploadStatus("Payload locked. Launching submission rocket!");
-          setIsProctoringActive(false);
-          setProctoringViolations(0);
-          setProctoringLocked(false);
-          if (document.fullscreenElement) {
-            document.exitFullscreen().catch(err => {
-              console.warn("Fullscreen exit failed:", err);
-            });
-          }
+          setUploadStatus("Submission successful!");
           
           setTimeout(() => {
             setSelectedTestToSubmit(null);
-            setRocketTrigger(true);
             setUploadFile(null);
             setUploadStatus('');
             setUploadProgress(null);
@@ -395,7 +299,7 @@ export const StudentDashboard = () => {
           setIsUploading(false);
         }
       }
-    }, 150);
+    }, 100);
   };
 
   // Download printable PDF certificate simulation
@@ -556,22 +460,6 @@ export const StudentDashboard = () => {
     doc.document.close();
   };
 
-  // Easter Eggs triggers
-  const triggerEasterEgg = (eggType) => {
-    if (eggType === 'rocket') {
-      setEggMsg("🚀 Flying Rocket Easter Egg! Spaceship launched!");
-      setTimeout(() => setEggMsg(''), 3000);
-      confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 } });
-    } else if (eggType === 'six') {
-      setEggMsg("🏏 SIXER! The cricket ball flies out of the stadium!");
-      setTimeout(() => setEggMsg(''), 3000);
-      confetti({ particleCount: 80, spread: 80, origin: { y: 0.6 } });
-    } else if (eggType === 'robot') {
-      setEggMsg("🤖 Dancing Robot Easter Egg! Fact: AI can read handwritten structures.");
-      setTimeout(() => setEggMsg(''), 3500);
-    }
-  };
-
   // Subject Score Radar Charts Config
   const performanceData = [
     { subject: 'Math', score: 85, fullMark: 100 },
@@ -610,7 +498,7 @@ export const StudentDashboard = () => {
 
         {/* Tabs skeleton */}
         <div className="flex bg-slate-950/20 p-1.5 rounded-2xl border border-white/5 mb-8 w-fit gap-2">
-          {Array.from({ length: 5 }).map((_, i) => (
+          {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} variant="rect" width="100px" height="36px" />
           ))}
         </div>
@@ -695,7 +583,7 @@ export const StudentDashboard = () => {
               EduTrack <span className="text-brand-cyan">AI</span>
             </span>
           </div>
-          <button onClick={() => setSidebarOpen(false)} aria-label="Close Navigation Menu" className="lg:hidden p-2 text-slate-400 hover:text-slate-650 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-cyan/50">
+          <button onClick={() => setSidebarOpen(false)} aria-label="Close Navigation Menu" className="lg:hidden p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-cyan/50">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -789,27 +677,6 @@ export const StudentDashboard = () => {
         {/* Main Content Area */}
         <main className="flex-grow p-4 sm:p-6 max-w-7xl mx-auto w-full relative z-10 text-left">
       
-      {/* Paper Plane Flying Alert */}
-      <PaperPlaneNotification 
-        trigger={planeTrigger} 
-        title="Mathematics Midterm Assigned" 
-        onFinish={() => setPlaneTrigger(false)} 
-      />
-
-      {/* Rocket Submission Overlay */}
-      <RocketSubmission 
-        trigger={rocketTrigger} 
-        onFinish={() => setRocketTrigger(false)} 
-      />
-
-      {/* Easter Egg Floating alerts */}
-      {eggMsg && (
-        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 p-4 rounded-2xl bg-slate-900 border border-brand-cyan/40 text-brand-cyan font-bold text-xs uppercase tracking-wider shadow-2xl flex items-center gap-2 animate-bounce">
-          <Sparkles className="h-4 w-4 animate-spin" />
-          <span>{eggMsg}</span>
-        </div>
-      )}
-
       {/* Top Welcome Panel */}
       <DashboardHeader
         roleLabel="Student"
@@ -819,7 +686,6 @@ export const StudentDashboard = () => {
           <div 
             onClick={() => {
               setStreakCount(prev => prev + 1);
-              triggerEasterEgg('six');
             }}
             className="px-2.5 py-1 rounded bg-orange-500/20 border border-orange-500/40 text-[10px] font-bold text-orange-400 flex items-center gap-1 cursor-pointer hover:scale-105 active:scale-95 transition-all shadow shrink-0"
             title="Click to claim daily streak XP!"
@@ -840,7 +706,7 @@ export const StudentDashboard = () => {
                 <circle cx="32" cy="32" r="28" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} strokeWidth="5" fill="transparent" />
                 <circle cx="32" cy="32" r="28" stroke="url(#cyanGlowGrad)" strokeWidth="5" fill="transparent" 
                   strokeDasharray={2 * Math.PI * 28} 
-                  strokeDashoffset={2 * Math.PI * 28 * (1 - ((student?.xp % 1000) / 1000))} 
+                  strokeDashoffset={2 * Math.PI * 28 * (1 - (((student?.xp || 0) % 1000) / 1000))} 
                   strokeLinecap="round"
                 />
                 <defs>
@@ -867,7 +733,7 @@ export const StudentDashboard = () => {
               </span>
             </div>
 
-            <div className="border-l border-white/5 pl-6 text-left shrink-0">
+            <div className="border-slate-200 dark:border-white/10 md:border-l md:pl-6 text-left shrink-0">
               <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Class Rank</span>
               <span className="block text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">{student?.rank ? `#${student.rank}` : '-'}</span>
             </div>
@@ -875,9 +741,9 @@ export const StudentDashboard = () => {
         }
       />
 
-      {/* Tabs Switcher including Museum */}
-      <div className="flex lg:hidden bg-slate-950/20 p-1.5 rounded-2xl border border-white/5 mb-8 w-fit overflow-x-auto no-scrollbar">
-        {['overview', 'tests', 'analytics', 'museum', 'achievements'].map((tab) => (
+      {/* Tabs Switcher */}
+      <div className="flex lg:hidden bg-slate-955/20 p-1.5 rounded-2xl border border-white/5 mb-8 w-fit overflow-x-auto no-scrollbar">
+        {['overview', 'tests', 'analytics', 'achievements'].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -887,22 +753,9 @@ export const StudentDashboard = () => {
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            {tab === 'museum' ? '🏛️ 3D Science Museum' : tab}
+            {tab}
           </button>
         ))}
-      </div>
-
-      {/* Trigger Buttons for Easter Eggs */}
-      <div className="flex gap-2 mb-6">
-        <button onClick={() => triggerEasterEgg('six')} className="px-3 py-1.5 rounded-xl border border-white/10 text-[10px] font-bold uppercase bg-slate-900 text-slate-300 hover:border-brand-purple">
-          🏏 Trigger Six
-        </button>
-        <button onClick={() => triggerEasterEgg('rocket')} className="px-3 py-1.5 rounded-xl border border-white/10 text-[10px] font-bold uppercase bg-slate-900 text-slate-300 hover:border-brand-cyan">
-          🚀 Trigger Rocket
-        </button>
-        <button onClick={() => triggerEasterEgg('robot')} className="px-3 py-1.5 rounded-xl border border-white/10 text-[10px] font-bold uppercase bg-slate-900 text-slate-300 hover:border-brand-pink">
-          🤖 Trigger Robot
-        </button>
       </div>
 
       {/* Grid Dashboard Modules */}
@@ -963,7 +816,6 @@ export const StudentDashboard = () => {
                             submission.status === 'evaluated' && result ? (
                               <button
                                 onClick={() => {
-                                  setVaultOpened(false);
                                   setSelectedResult({ result, test: t });
                                 }}
                                 className="px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-1"
@@ -1038,10 +890,9 @@ export const StudentDashboard = () => {
                         <div className="mt-4 flex items-center gap-2 pt-3 border-t border-white/5">
                           <button
                             onClick={() => {
-                              setVaultOpened(false);
                               setSelectedResult({ result: res, test });
                             }}
-                            className="flex-1 py-2 text-center rounded-xl bg-slate-950/60 border border-white/10 hover:bg-slate-950 text-[10px] font-bold flex items-center justify-center gap-1"
+                            className="flex-1 py-2 text-center rounded-xl bg-slate-950/60 border border-white/10 hover:bg-slate-900 text-[10px] font-bold flex items-center justify-center gap-1"
                           >
                             <Eye className="h-3 w-3" />
                             AI Report
@@ -1067,7 +918,7 @@ export const StudentDashboard = () => {
           {/* Right Sidebar Widgets */}
           <div className="space-y-6">
             
-            {/* 3D steps podium Leaderboard */}
+            {/* Podium stand Leaderboard */}
             <div className={`p-6 rounded-3xl border ${
               theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
             }`}>
@@ -1076,7 +927,6 @@ export const StudentDashboard = () => {
                 Podium Standings
               </h3>
 
-              {/* 3D Podium Layout */}
               {leaderboard.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-center text-xs">
                   <Trophy className="h-8 w-8 text-slate-500 mb-2" />
@@ -1087,10 +937,10 @@ export const StudentDashboard = () => {
                   
                   {/* Silver Step (2nd) */}
                   <div className="flex flex-col items-center flex-1">
-                    <span className="text-[9px] font-bold text-slate-300 truncate max-w-[70px]">
+                    <span className="text-[9px] font-bold text-slate-350 truncate max-w-[70px]">
                       {leaderboard[1] ? leaderboard[1].name : 'Vacant'}
                     </span>
-                    <span className="text-[8px] text-slate-550">
+                    <span className="text-[8px] text-slate-500">
                       {leaderboard[1] ? `Lv. ${leaderboard[1].level}` : ''}
                     </span>
                     <div className="w-full h-16 bg-slate-400/40 rounded-t-xl flex items-center justify-center border border-white/10 shadow-lg mt-2 relative">
@@ -1119,7 +969,7 @@ export const StudentDashboard = () => {
                     <span className="text-[9px] font-bold text-amber-600 truncate max-w-[70px]">
                       {leaderboard[2] ? leaderboard[2].name : 'Vacant'}
                     </span>
-                    <span className="text-[8px] text-slate-550">
+                    <span className="text-[8px] text-slate-500">
                       {leaderboard[2] ? `Lv. ${leaderboard[2].level}` : ''}
                     </span>
                     <div className="w-full h-12 bg-amber-700/40 rounded-t-xl flex items-center justify-center border border-white/10 shadow-lg mt-2 relative">
@@ -1150,7 +1000,7 @@ export const StudentDashboard = () => {
               </div>
             </div>
 
-            {/* Badges and Rewards checklist */}
+            {/* Badges */}
             <div className={`p-6 rounded-3xl border ${
               theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
             }`}>
@@ -1226,7 +1076,7 @@ export const StudentDashboard = () => {
                   <div className="flex items-center gap-3 pt-4 border-t border-white/5">
                     <button
                       onClick={() => window.open(t.question_paper_url, '_blank')}
-                      className="flex-1 py-2.5 rounded-xl bg-slate-950 border border-white/10 hover:bg-slate-800 text-xs font-bold text-white flex items-center justify-center gap-2"
+                      className="flex-1 py-2.5 rounded-xl bg-slate-900 border border-white/10 hover:bg-slate-800 text-xs font-bold text-white flex items-center justify-center gap-2"
                     >
                       <Download className="h-4 w-4 text-brand-cyan" />
                       Paper PDF
@@ -1236,7 +1086,6 @@ export const StudentDashboard = () => {
                       submission.status === 'evaluated' && result ? (
                         <button
                           onClick={() => {
-                            setVaultOpened(false);
                             setSelectedResult({ result, test: t });
                           }}
                           className="flex-1 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold"
@@ -1282,34 +1131,34 @@ export const StudentDashboard = () => {
           {/* Weak chapters and strong areas highlights */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
-            <div className={`p-6 rounded-3xl border border-red-500/10 bg-red-500/5`}>
+            <div className="p-6 rounded-3xl border border-red-500/10 bg-red-500/5">
               <h4 className="font-display font-bold text-base text-red-400 flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5" />
                 Focus Chapters (Improvement Needed)
               </h4>
               <ul className="mt-4 space-y-2 text-xs font-light text-slate-300">
-                <li className="flex justify-between items-center p-2 rounded bg-slate-950/20">
+                <li className="flex justify-between items-center p-2 rounded bg-slate-955/20">
                   <span>Chemical Equilibrium & Catalyst Rates</span>
                   <span className="text-red-400 font-semibold font-mono">CHEM-303</span>
                 </li>
-                <li className="flex justify-between items-center p-2 rounded bg-slate-950/20">
+                <li className="flex justify-between items-center p-2 rounded bg-slate-955/20">
                   <span>Three-Dimensional Vector Coordinates</span>
                   <span className="text-red-400 font-semibold font-mono">MATH-101</span>
                 </li>
               </ul>
             </div>
 
-            <div className={`p-6 rounded-3xl border border-emerald-500/10 bg-emerald-500/5`}>
+            <div className="p-6 rounded-3xl border border-emerald-500/10 bg-emerald-500/5">
               <h4 className="font-display font-bold text-base text-emerald-400 flex items-center gap-2">
                 <CheckCircle className="h-5 w-5" />
                 Strong Concept Pillars (Excellence)
               </h4>
-              <ul className="mt-4 space-y-2 text-xs font-light text-slate-300">
-                <li className="flex justify-between items-center p-2 rounded bg-slate-950/20">
+              <ul className="mt-4 space-y-2 text-xs font-light text-slate-350">
+                <li className="flex justify-between items-center p-2 rounded bg-slate-955/20">
                   <span>Carbon Ring Isomer & Benzene Structures</span>
                   <span className="text-emerald-400 font-semibold font-mono">CHEM-303</span>
                 </li>
-                <li className="flex justify-between items-center p-2 rounded bg-slate-950/20">
+                <li className="flex justify-between items-center p-2 rounded bg-slate-955/20">
                   <span>Maxwell Electromagnetism Integration</span>
                   <span className="text-emerald-400 font-semibold font-mono">PHYS-202</span>
                 </li>
@@ -1321,84 +1170,11 @@ export const StudentDashboard = () => {
         </div>
       )}
 
-      {/* 3D Science Museum Tab */}
-      {activeTab === 'museum' && (
-        <Suspense fallback={
-          <div className="py-20 text-center flex flex-col items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-brand-purple"></div>
-            <p className="text-xs text-slate-400 mt-2 font-mono uppercase tracking-wider animate-pulse">Loading Sandbox Widgets...</p>
-          </div>
-        }>
-          <div className="space-y-6 text-left">
-            {/* Tab/Pill Sandbox Selector */}
-            <div className="flex flex-wrap gap-2 p-1.5 rounded-2xl bg-slate-950/20 border border-white/5 w-fit">
-              {[
-                { id: 'physics', label: 'Physics Gravity', emoji: '🌌', colorClass: 'border-brand-cyan/20 text-brand-cyan bg-brand-cyan/5' },
-                { id: 'chemistry', label: 'Chemistry Atom', emoji: '🧪', colorClass: 'border-brand-purple/20 text-brand-purple bg-brand-purple/5' },
-                { id: 'biology', label: 'Biology Neurons', emoji: '🧬', colorClass: 'border-brand-pink/20 text-brand-pink bg-brand-pink/5' },
-                { id: 'math', label: 'Math Cubes', emoji: '📐', colorClass: 'border-yellow-500/20 text-yellow-400 bg-yellow-400/5' },
-                { id: 'english', label: 'English Flying Letters', emoji: '📚', colorClass: 'border-indigo-500/20 text-indigo-400 bg-indigo-400/5' }
-              ].map(sub => {
-                const active = activeSandbox === sub.id;
-                return (
-                  <button
-                    key={sub.id}
-                    onClick={() => setActiveSandbox(sub.id)}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 cursor-pointer ${
-                      active 
-                        ? `${sub.colorClass} border-current shadow-lg` 
-                        : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                    }`}
-                  >
-                    <span>{sub.emoji}</span>
-                    <span>{sub.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Selected Sandbox Display */}
-            <div className="w-full">
-              {activeSandbox === 'physics' && (
-                <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-                  <h3 className="font-display font-extrabold text-base mb-2 text-brand-cyan">🌌 Physics Gravity Sandbox</h3>
-                  <PhysicsSandbox theme={theme} />
-                </div>
-              )}
-              {activeSandbox === 'chemistry' && (
-                <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-                  <h3 className="font-display font-extrabold text-base mb-2 text-brand-purple">🧪 Chemistry Atom Beaker</h3>
-                  <ChemistrySandbox theme={theme} />
-                </div>
-              )}
-              {activeSandbox === 'biology' && (
-                <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-                  <h3 className="font-display font-extrabold text-base mb-2 text-brand-pink">🧬 Biology DNA & Firing Neurons</h3>
-                  <BiologySandbox theme={theme} />
-                </div>
-              )}
-              {activeSandbox === 'math' && (
-                <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-                  <h3 className="font-display font-extrabold text-base mb-2 text-yellow-400">📐 Math 3D rotating cubes</h3>
-                  <MathSandbox theme={theme} />
-                </div>
-              )}
-              {activeSandbox === 'english' && (
-                <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-                  <h3 className="font-display font-extrabold text-base mb-2 text-indigo-400">📚 English Flying Letters sandbox</h3>
-                  <EnglishSandbox theme={theme} />
-                </div>
-              )}
-            </div>
-          </div>
-        </Suspense>
-      )}
-
       {/* Achievements and Certificates Tab */}
       {activeTab === 'achievements' && (
         <div className="space-y-6 text-left">
           
-          {/* Printable Certificates checklist */}
+          {/* Printable Certificates */}
           <div className={`p-6 rounded-3xl border ${
             theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
           }`}>
@@ -1418,7 +1194,7 @@ export const StudentDashboard = () => {
                   </div>
                   <button
                     onClick={() => handleDownloadCertificate(cert)}
-                    className="p-2.5 rounded-xl bg-slate-950 border border-white/10 hover:bg-slate-800 text-xs font-bold text-white flex items-center gap-1.5"
+                    className="p-2.5 rounded-xl bg-slate-90 border border-white/10 hover:bg-slate-800 text-xs font-bold text-white flex items-center gap-1.5"
                   >
                     <Download className="h-4 w-4 text-brand-cyan" />
                     PDF
@@ -1428,7 +1204,7 @@ export const StudentDashboard = () => {
             </div>
           </div>
 
-          {/* Badges detailing */}
+          {/* Badges library */}
           <div className={`p-6 rounded-3xl border ${
             theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'
           }`}>
@@ -1468,504 +1244,328 @@ export const StudentDashboard = () => {
       {/* Answer Upload Overlay Modal */}
       {selectedTestToSubmit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
-          {proctoringLocked ? (
-            /* LOCKED ENVIRONMENT */
-            <div className={`w-full max-w-md p-8 rounded-3xl border relative text-center ${
-              theme === 'dark' ? 'bg-slate-950 border-rose-500/30 text-white' : 'bg-white border-rose-500/20 text-slate-900'
-            }`}>
-              <div className="h-16 w-16 mx-auto rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 mb-6 animate-pulse">
-                <AlertTriangle className="h-8 w-8" />
-              </div>
-              <h3 className="font-display font-extrabold text-lg text-rose-500">EXAM PORTAL LOCKED</h3>
-              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                Your session for <strong>{selectedTestToSubmit.title}</strong> has been locked due to 3 or more proctoring security violations (switching browser tabs or exiting full screen).
-              </p>
-              <div className="mt-6 p-4 rounded-2xl bg-rose-500/5 border border-rose-500/10 text-[11px] text-slate-300 font-mono text-left space-y-1">
-                <p>• Status: LOCKED BY POLICY</p>
-                <p>• Security Violations: {proctoringViolations}</p>
-                <p>• Action: Report Logged & Dispatched to Instructor</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTestToSubmit(null);
-                  setIsProctoringActive(false);
-                  setProctoringViolations(0);
-                  setProctoringLocked(false);
-                }}
-                className="mt-6 w-full py-3.5 font-bold text-white bg-slate-900 border border-white/10 rounded-xl hover:bg-slate-800 transition-all cursor-pointer"
-              >
-                Close & Return
-              </button>
-            </div>
-          ) : !isProctoringActive ? (
-            /* PROCTORING SHIELD ONBOARDING WARNING */
-            <div className={`w-full max-w-md p-8 rounded-3xl border relative text-left ${
-              theme === 'dark' ? 'bg-slate-950 border-white/10 text-white' : 'bg-white border-black/10 text-slate-900'
-            }`}>
-              <button 
-                onClick={() => {
-                  setSelectedTestToSubmit(null);
-                  setUploadProgress(null);
-                  setUploadError(null);
-                  setIsUploading(false);
-                }}
-                className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-
-              <div className="h-12 w-12 rounded-2xl bg-brand-cyan/15 border border-brand-cyan/30 flex items-center justify-center text-brand-cyan mb-4 animate-bounce">
-                <ShieldCheck className="h-6 w-6" />
-              </div>
-              <h3 className="font-display font-extrabold text-lg text-white">Secure Proctoring Portal</h3>
-              <p className="text-xs text-slate-400 mt-1">Academic Integrity Shield is required to submit: <strong>{selectedTestToSubmit.title}</strong></p>
-
-              <div className="mt-6 space-y-3.5 text-xs text-slate-300 leading-relaxed font-light">
-                <p>By entering, you agree to the following security protocols:</p>
-                <ul className="space-y-2 text-slate-400 pl-1">
-                  <li className="flex items-start gap-2">
-                    <span className="text-brand-cyan font-bold">•</span>
-                    <span><strong>Fullscreen Mode Enabled</strong>: Exiting fullscreen triggers a violation.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-brand-cyan font-bold">•</span>
-                    <span><strong>No Tab/App Switching</strong>: Navigating away from this tab triggers a violation.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-brand-cyan font-bold">•</span>
-                    <span><strong>Clipboard Blocked</strong>: Copy, cut, and paste shortcuts are disabled.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-brand-cyan font-bold">•</span>
-                    <span><strong>Right-Click Blocked</strong>: Context menu is disabled.</span>
-                  </li>
-                </ul>
-                <p className="text-[11px] text-amber-500 font-medium">⚠️ Exceeding 2 violations locks your exam and flags your student profile.</p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsProctoringActive(true)}
-                className="mt-6 w-full py-3.5 font-bold text-white bg-gradient-to-r from-brand-purple to-brand-cyan rounded-xl shadow-lg hover:shadow-cyan-500/20 hover:scale-102 transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                <ShieldCheck className="h-4.5 w-4.5" /> Start Exam Submission
-              </button>
-            </div>
-          ) : (
-            /* ACTIVE PROCTORING UPLOAD FORM */
-            <div className={`w-full max-w-md p-6 rounded-3xl border relative ${
-              theme === 'dark' ? 'bg-slate-950 border-white/10 text-white' : 'bg-white border-black/10 text-slate-900'
-            }`}>
-              <button 
-                onClick={() => {
-                  setSelectedTestToSubmit(null);
-                  setUploadProgress(null);
-                  setUploadError(null);
-                  setIsUploading(false);
-                  setIsProctoringActive(false);
-                  setProctoringViolations(0);
-                  if (document.fullscreenElement) {
-                    document.exitFullscreen().catch(err => {
-                      console.warn("Fullscreen exit failed:", err);
-                    });
-                  }
-                }}
-                className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
-                disabled={isUploading}
-              >
-                <X className="h-5 w-5" />
-              </button>
-
-              {/* Secure Active Header Banner */}
-              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-between text-rose-400 mb-5 animate-pulse">
-                <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-rose-500" />
-                  PROCTORING ACTIVE
-                </span>
-                <span className="text-[10px] font-mono font-bold">VIOLATIONS: {proctoringViolations}/3</span>
-              </div>
-
-              {proctoringWarning && (
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs flex items-center gap-2 mb-4">
-                  <AlertTriangle className="h-4 w-4 shrink-0 animate-bounce" />
-                  <span>{proctoringWarning}</span>
-                </div>
-              )}
-
-              <h3 className="font-display font-extrabold text-lg flex items-center gap-1.5 text-brand-purple">
-                <Upload className="h-5 w-5 text-brand-cyan" />
-                Upload Answer Sheet
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">Submit solved sheet for: {selectedTestToSubmit.title}</p>
-
-              {uploadStatus && (
-                <div className={`mt-4 p-3 rounded-xl text-xs font-medium border ${
-                  uploadError 
-                    ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-                    : 'bg-brand-purple/10 border-brand-purple/20 text-brand-purple'
-                }`}>
-                  {uploadStatus}
-                </div>
-              )}
-
-              {uploadError && (
-                <div className="mt-2 text-xs text-rose-500 font-semibold leading-relaxed">
-                  {uploadError}
-                </div>
-              )}
-
-              <form onSubmit={handleAnswerSubmit} className="mt-6 space-y-4">
-                {/* File Type Selection */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Select File Type</label>
-                  <div className="flex gap-2">
-                    {['pdf', 'jpg', 'png'].map((type) => (
-                      <button
-                        key={type}
-                        type="button"
-                        disabled={isUploading}
-                        onClick={() => setUploadFileType(type)}
-                        className={`flex-1 py-2 text-xs font-bold rounded-lg border uppercase transition-all cursor-pointer ${
-                          uploadFileType === type
-                            ? 'border-brand-cyan bg-brand-cyan/20 text-white'
-                            : 'border-white/5 bg-slate-900 text-slate-400'
-                        }`}
-                      >
-                        {type}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Drag or Browse Zone */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Drag or Browse File</label>
-                  <input
-                    type="file"
-                    required
-                    disabled={isUploading}
-                    onClick={() => setIsBrowsingFile(true)}
-                    onChange={(e) => {
-                      setUploadFile(e.target.files[0]);
-                      setTimeout(() => setIsBrowsingFile(false), 2000);
-                    }}
-                    accept={uploadFileType === 'pdf' ? '.pdf' : '.jpg,.jpeg,.png'}
-                    className={`w-full py-4 px-4 text-xs rounded-xl border border-dashed border-slate-700 bg-slate-950/40 text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-brand-cyan file:cursor-pointer`}
-                  />
-                </div>
-
-                {/* Simulation Toggle */}
-                <div className="flex items-center gap-2 py-2">
-                  <input
-                    id="sim-drop"
-                    type="checkbox"
-                    checked={simulateNetworkDrop}
-                    disabled={isUploading}
-                    onChange={(e) => setSimulateNetworkDrop(e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-900 text-brand-purple focus:ring-brand-purple"
-                  />
-                  <label htmlFor="sim-drop" className="text-xs text-slate-400 select-none cursor-pointer">
-                    Simulate connection drop failure at 60%
-                  </label>
-                </div>
-
-                {/* Real-time Progress Bar */}
-                {uploadProgress !== null && (
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[10px] uppercase font-bold text-slate-400">
-                      <span>Progress</span>
-                      <span>{uploadProgress}%</span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-                      <div 
-                        className="h-full bg-gradient-to-r from-brand-purple to-brand-cyan transition-all duration-150"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions Button */}
-                {uploadError ? (
-                  <button
-                    type="button"
-                    onClick={() => handleAnswerSubmit()}
-                    className="w-full py-3.5 font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600 rounded-xl shadow-lg hover:shadow-orange-500/10 hover:scale-102 active:scale-98 transition-all cursor-pointer"
-                  >
-                    Retry Upload
-                  </button>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={isUploading}
-                    className="w-full py-3.5 font-bold text-white bg-gradient-to-r from-brand-purple to-brand-cyan rounded-xl shadow-lg hover:shadow-cyan-500/10 transition-all disabled:opacity-50 cursor-pointer"
-                  >
-                    {isUploading ? 'Uploading solved sheet...' : 'Upload Sheet'}
-                  </button>
-                )}
-              </form>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Result Vault Box Reveal Modal */}
-      {selectedResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className={`w-full max-w-xl p-8 rounded-3xl border relative max-h-[85vh] overflow-y-auto ${
+          <div className={`w-full max-w-md p-6 rounded-3xl border relative ${
             theme === 'dark' ? 'bg-slate-950 border-white/10 text-white' : 'bg-white border-black/10 text-slate-900'
           }`}>
             <button 
               onClick={() => {
+                setSelectedTestToSubmit(null);
+                setUploadProgress(null);
+                setUploadError(null);
+                setIsUploading(false);
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
+              disabled={isUploading}
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <h3 className="font-display font-extrabold text-lg flex items-center gap-1.5 text-brand-purple">
+              <Upload className="h-5 w-5 text-brand-cyan" />
+              Upload Answer Sheet
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Submit solved sheet for: {selectedTestToSubmit.title}</p>
+
+            {uploadStatus && (
+              <div className={`mt-4 p-3 rounded-xl text-xs font-medium border ${
+                uploadError 
+                  ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                  : 'bg-brand-purple/10 border-brand-purple/20 text-brand-purple'
+              }`}>
+                {uploadStatus}
+              </div>
+            )}
+
+            {uploadError && (
+              <div className="mt-2 text-xs text-rose-500 font-semibold leading-relaxed">
+                {uploadError}
+              </div>
+            )}
+
+            <form onSubmit={handleAnswerSubmit} className="mt-6 space-y-4">
+              {/* File Type Selection */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Select File Type</label>
+                <div className="flex gap-2">
+                  {['pdf', 'jpg', 'png'].map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      disabled={isUploading}
+                      onClick={() => setUploadFileType(type)}
+                      className={`flex-1 py-2 text-xs font-bold rounded-lg border uppercase transition-all cursor-pointer ${
+                        uploadFileType === type
+                          ? 'border-brand-cyan bg-brand-cyan/20 text-white'
+                          : 'border-white/5 bg-slate-900 text-slate-400'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Drag or Browse Zone */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Drag or Browse File</label>
+                <input
+                  type="file"
+                  required
+                  disabled={isUploading}
+                  onChange={(e) => {
+                    setUploadFile(e.target.files[0]);
+                  }}
+                  accept={uploadFileType === 'pdf' ? '.pdf' : '.jpg,.jpeg,.png'}
+                  className="w-full py-4 px-4 text-xs rounded-xl border border-dashed border-slate-700 bg-slate-950/40 text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-brand-cyan file:cursor-pointer"
+                />
+              </div>
+
+              {/* Real-time Progress Bar */}
+              {uploadProgress !== null && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[10px] uppercase font-bold text-slate-400">
+                    <span>Progress</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-brand-purple to-brand-cyan transition-all duration-150"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Actions Button */}
+              {uploadError ? (
+                <button
+                  type="button"
+                  onClick={() => handleAnswerSubmit()}
+                  className="w-full py-3.5 font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600 rounded-xl shadow-lg hover:shadow-orange-500/10 hover:scale-102 active:scale-98 transition-all cursor-pointer"
+                >
+                  Retry Upload
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={isUploading}
+                  className="w-full py-3.5 font-bold text-white bg-gradient-to-r from-brand-purple to-brand-cyan rounded-xl shadow-lg hover:shadow-cyan-500/10 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {isUploading ? 'Uploading solved sheet...' : 'Upload Sheet'}
+                </button>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Result Details Modal (Simplified - No Locked Vault) */}
+      {selectedResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-xl p-5 sm:p-8 rounded-2xl sm:rounded-3xl border relative max-h-[85vh] overflow-y-auto ${
+            theme === 'dark' ? 'bg-slate-955 border-white/10 text-white' : 'bg-white border-black/10 text-slate-900'
+          }`}>
+            <button 
+              onClick={() => {
                 setSelectedResult(null);
-                setVaultOpened(false);
               }}
               className="absolute top-4 right-4 text-slate-400 hover:text-white"
             >
               <X className="h-5 w-5" />
             </button>
 
-            {!vaultOpened ? (
-              /* Locked Vault Box render */
-              <div className="py-12 text-center space-y-6 flex flex-col items-center">
-                <div className="relative h-28 w-28 rounded-full border-4 border-yellow-500/50 flex items-center justify-center bg-yellow-500/10 shadow-2xl animate-pulse">
-                  <span className="text-5xl">🔒</span>
-                  <div className="absolute inset-0 border border-dashed border-yellow-300 rounded-full animate-spin" style={{ animationDuration: '6s' }} />
-                </div>
-                
-                <div className="space-y-2">
-                  <h3 className="font-display font-extrabold text-xl text-yellow-400 uppercase tracking-widest">
-                    Locked Assessment Vault
-                  </h3>
-                  <p className="text-xs text-slate-400 font-light max-w-xs mx-auto leading-relaxed">
-                    This lockbox contains your official grade certificate, teacher comments, and AI conceptual recommendations.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => {
-                    setCountUpMarks(0);
-                    setVaultOpened(true);
-                    confetti({ particleCount: 60, spread: 50 });
-                  }}
-                  className="px-8 py-3.5 font-bold text-white bg-gradient-to-r from-yellow-500 to-amber-600 rounded-xl shadow-lg hover:shadow-yellow-500/10 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-                >
-                  🚀 Break Vault & Reveal Marks
-                </button>
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                <Award className="h-6 w-6" />
               </div>
-            ) : (
-              /* Graded report details card with count-up */
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
-                    <Award className="h-6 w-6" />
+              <div>
+                <h3 className="font-display font-extrabold text-xl">{selectedResult.test.title}</h3>
+                <span className="text-[10px] uppercase font-bold text-brand-purple tracking-wide">{selectedResult.test.subject}</span>
+              </div>
+            </div>
+
+            {/* Scorecard Widget Grid (Uses isolated local countup scorecard) */}
+            <ScorecardGrid 
+              marksObtained={selectedResult.result.marks_obtained} 
+              totalMarks={selectedResult.test.total_marks} 
+              grade={selectedResult.result.grade} 
+            />
+
+            {/* Teacher feedback remarks */}
+            <div className="mt-6 text-left">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Teacher Evaluation Remarks</h4>
+              <p className="mt-2 text-sm italic bg-slate-900/40 p-4 rounded-xl border border-white/5 text-slate-400 font-light">
+                " {selectedResult.result.feedback || 'Outstanding reasoning in formulas.'} "
+              </p>
+            </div>
+
+            {/* AI Diagnostics */}
+            {selectedResult.result.ai_feedback && (
+              <div className="mt-6 text-left space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-brand-purple flex items-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-brand-cyan animate-pulse" />
+                  AI Performance Diagnostic & Feedback
+                </h4>
+                
+                {/* Simulated OCR Scanner Specs */}
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-900/40 border border-white/5 text-[10px]">
+                  <div>
+                    <span className="text-slate-500">OCR Scan Confidence:</span>
+                    <strong className="block text-brand-cyan font-mono mt-0.5">{selectedResult.result.ai_feedback.ocr_confidence || '95.2%'}</strong>
                   </div>
                   <div>
-                    <h3 className="font-display font-extrabold text-xl">{selectedResult.test.title}</h3>
-                    <span className="text-[10px] uppercase font-bold text-brand-purple tracking-wide">{selectedResult.test.subject}</span>
+                    <span className="text-slate-500">Syllabus Match Similarity:</span>
+                    <strong className="block text-brand-cyan font-mono mt-0.5">{selectedResult.result.ai_feedback.comparison_matched || '88%'}</strong>
                   </div>
                 </div>
 
-                {/* Scorecard Widget Grid with countup marks */}
-                <div className="grid grid-cols-3 gap-3 mt-6">
-                  <div className="p-4 rounded-2xl bg-slate-900/60 text-center border border-white/5">
-                    <span className="block text-[9px] uppercase tracking-wider text-slate-500">Marks Obtained</span>
-                    <span className="text-xl font-extrabold text-brand-cyan">{countUpMarks}</span>
-                    <span className="text-[10px] text-slate-500 block mt-0.5">/ {selectedResult.test.total_marks}</span>
-                  </div>
-
-                  <div className="p-4 rounded-2xl bg-slate-900/60 text-center border border-white/5">
-                    <span className="block text-[9px] uppercase tracking-wider text-slate-500">Percentage</span>
-                    <span className="text-xl font-extrabold text-brand-cyan">
-                      {Math.round((countUpMarks / selectedResult.test.total_marks) * 100)}%
-                    </span>
-                  </div>
-
-                  <div className="p-4 rounded-2xl bg-slate-900/60 text-center border border-white/5">
-                    <span className="block text-[9px] uppercase tracking-wider text-slate-500">Grade Letter</span>
-                    <span className="text-xl font-extrabold text-emerald-400 font-display">{selectedResult.result.grade}</span>
-                  </div>
-                </div>
-
-                {/* Teacher feedback remarks */}
-                <div className="mt-6 text-left">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Teacher Evaluation Remarks</h4>
-                  <p className="mt-2 text-sm italic bg-slate-900/40 p-4 rounded-xl border border-white/5 text-slate-300">
-                    " {selectedResult.result.feedback || 'Outstanding reasoning in formulas.'} "
-                  </p>
-                </div>
-
-                {/* AI Diagnostics */}
-                {selectedResult.result.ai_feedback && (
-                  <div className="mt-6 text-left space-y-4">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-brand-purple flex items-center gap-1.5">
-                      <Sparkles className="h-4 w-4 text-brand-cyan animate-pulse" />
-                      AI Performance Diagnostic & Feedback
-                    </h4>
-                    
-                    {/* Simulated OCR Scanner Specs */}
-                    <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-900/40 border border-white/5 text-[10px]">
-                      <div>
-                        <span className="text-slate-500">OCR Scan Confidence:</span>
-                        <strong className="block text-brand-cyan font-mono mt-0.5">{selectedResult.result.ai_feedback.ocr_confidence || '95.2%'}</strong>
-                      </div>
-                      <div>
-                        <span className="text-slate-500">Syllabus Match Similarity:</span>
-                        <strong className="block text-brand-cyan font-mono mt-0.5">{selectedResult.result.ai_feedback.comparison_matched || '88%'}</strong>
-                      </div>
-                    </div>
-
-                    {/* Gemini Feedback Text */}
-                    {selectedResult.result.ai_feedback.studentFeedback && (
-                      <div className="p-4 rounded-xl border border-brand-cyan/20 bg-brand-cyan/5 space-y-1">
-                        <span className="text-[10px] font-bold text-brand-cyan uppercase tracking-wider block">Diagnostic Summary</span>
-                        <p className="text-xs text-slate-300 leading-relaxed font-light">
-                          {selectedResult.result.ai_feedback.studentFeedback}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Detailed Answer Review */}
-                    {selectedResult.result.ai_feedback.detailedAnswers && (
-                      <div className="space-y-3">
-                        <span className="text-[10px] font-bold text-brand-purple uppercase tracking-wider block">Detailed Question & Answer Review</span>
-                        {typeof selectedResult.result.ai_feedback.detailedAnswers === 'string' ? (
-                          <div 
-                            className="p-4 rounded-xl border border-white/5 bg-slate-900/60 text-xs text-slate-350 font-light leading-relaxed max-h-[300px] overflow-y-auto text-left"
-                            dangerouslySetInnerHTML={{ __html: renderMarkdown(selectedResult.result.ai_feedback.detailedAnswers) }}
-                          />
-                        ) : Array.isArray(selectedResult.result.ai_feedback.detailedAnswers) && selectedResult.result.ai_feedback.detailedAnswers.length > 0 ? (
-                          <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-                            {selectedResult.result.ai_feedback.detailedAnswers.map((item, idx) => (
-                              <div key={idx} className="p-3.5 rounded-xl border border-white/5 bg-slate-900/60 text-xs space-y-2">
-                                <div className="flex justify-between items-center">
-                                  <span className="font-bold text-brand-cyan">{item.questionNumber}</span>
-                                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                    item.status === 'Correct' ? 'bg-emerald-500/10 text-emerald-400' :
-                                    item.status === 'Partially Correct' ? 'bg-yellow-500/10 text-yellow-400' :
-                                    'bg-rose-500/10 text-rose-455'
-                                  }`}>
-                                    {item.status}
-                                  </span>
-                                </div>
-                                
-                                <div>
-                                  <span className="text-[10px] text-slate-500 block">Question:</span>
-                                  <p className="text-slate-350 font-light mt-0.5">{item.questionText}</p>
-                                </div>
-
-                                <div className="p-2.5 rounded bg-slate-950/40 border border-white/5">
-                                  <span className="text-[9px] text-slate-550 block font-semibold">Student's Answer:</span>
-                                  <p className="text-slate-400 italic font-light mt-0.5">"{item.studentAnswer}"</p>
-                                </div>
-
-                                {/* Keywords tags */}
-                                <div className="flex flex-wrap gap-1.5 py-1">
-                                  {item.keywordsMatched && item.keywordsMatched.map((k, i) => (
-                                    <span key={i} className="px-2 py-0.5 rounded bg-emerald-500/10 text-[9px] text-emerald-400 border border-emerald-500/20">
-                                      ✓ {k}
-                                    </span>
-                                  ))}
-                                  {item.keywordsMissing && item.keywordsMissing.map((k, i) => (
-                                    <span key={i} className="px-2 py-0.5 rounded bg-rose-500/10 text-[9px] text-rose-455 border border-rose-500/20">
-                                      ✗ {k}
-                                    </span>
-                                  ))}
-                                </div>
-
-                                {item.mistake && (
-                                  <div className="text-[11px]">
-                                    <span className="text-rose-400 font-semibold">Mistake: </span>
-                                    <span className="text-slate-300 font-light">{item.mistake}</span>
-                                  </div>
-                                )}
-
-                                {item.improvement && (
-                                  <div className="text-[11px]">
-                                    <span className="text-yellow-400 font-semibold">How to Improve: </span>
-                                    <span className="text-slate-300 font-light">{item.improvement}</span>
-                                  </div>
-                                )}
-
-                                {item.correctAnswer && (
-                                  <div className="p-2.5 rounded bg-brand-purple/5 border border-brand-purple/10 text-[11px]">
-                                    <span className="text-brand-cyan font-semibold block mb-0.5">Proper Model Answer to Learn:</span>
-                                    <p className="text-slate-300 font-light">{item.correctAnswer}</p>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-
-                    {/* Strengths & Weak Areas Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Strengths */}
-                      {selectedResult.result.ai_feedback.strengths && (
-                        <div className="p-3.5 rounded-xl border border-emerald-500/10 bg-emerald-500/5">
-                          <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block mb-2">Strengths</span>
-                          <ul className="space-y-1 text-[10px] list-disc list-inside text-slate-350 leading-relaxed font-light">
-                            {selectedResult.result.ai_feedback.strengths.map((s, i) => (
-                              <li key={i}>{s}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      
-                      {/* Weak Areas */}
-                      {selectedResult.result.ai_feedback.weakAreas && (
-                        <div className="p-3.5 rounded-xl border border-brand-pink/10 bg-brand-pink/5">
-                          <span className="text-[9px] font-bold text-brand-pink uppercase tracking-wider block mb-2">Areas of Focus</span>
-                          <ul className="space-y-1 text-[10px] list-disc list-inside text-slate-355 leading-relaxed font-light">
-                            {selectedResult.result.ai_feedback.weakAreas.map((w, i) => (
-                              <li key={i}>{w}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Revision Plan */}
-                    {selectedResult.result.ai_feedback.revisionPlan && (
-                      <div className="p-4 rounded-xl border border-brand-purple/20 bg-brand-purple/5 space-y-1">
-                        <span className="text-[10px] font-bold text-brand-purple uppercase tracking-wider block">7-Day Study Revision Plan</span>
-                        <p className="text-xs text-slate-300 leading-relaxed font-light">
-                          {selectedResult.result.ai_feedback.revisionPlan}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Motivation Message */}
-                    {selectedResult.result.ai_feedback.motivationMessage && (
-                      <div className="p-3 text-center rounded-xl bg-gradient-to-r from-brand-purple/10 to-brand-cyan/10 border border-white/5 text-[10px] text-brand-cyan font-semibold">
-                        ✨ "{selectedResult.result.ai_feedback.motivationMessage}"
-                      </div>
-                    )}
+                {/* Gemini Feedback Text */}
+                {selectedResult.result.ai_feedback.studentFeedback && (
+                  <div className="p-4 rounded-xl border border-brand-cyan/20 bg-brand-cyan/5 space-y-1">
+                    <span className="text-[10px] font-bold text-brand-cyan uppercase tracking-wider block">Diagnostic Summary</span>
+                    <p className="text-xs text-slate-300 leading-relaxed font-light">
+                      {selectedResult.result.ai_feedback.studentFeedback}
+                    </p>
                   </div>
                 )}
 
-                <div className="mt-8 flex gap-3">
-                  <button
-                    onClick={() => handlePrintReportCard(selectedResult.result, selectedResult.test)}
-                    className="flex-1 py-3 text-center text-xs font-bold text-white bg-brand-cyan hover:bg-brand-cyan/80 rounded-xl"
-                  >
-                    Download PDF Report Card
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedResult(null);
-                      setVaultOpened(false);
-                    }}
-                    className="px-6 py-3 text-center text-xs font-bold text-slate-300 bg-slate-900 border border-white/10 rounded-xl hover:bg-slate-800"
-                  >
-                    Close View
-                  </button>
+                {/* Detailed Answer Review */}
+                {selectedResult.result.ai_feedback.detailedAnswers && (
+                  <div className="space-y-3">
+                    <span className="text-[10px] font-bold text-brand-purple uppercase tracking-wider block">Detailed Question & Answer Review</span>
+                    {typeof selectedResult.result.ai_feedback.detailedAnswers === 'string' ? (
+                      <div 
+                        className="p-4 rounded-xl border border-white/5 bg-slate-900/60 text-xs text-slate-400 font-light leading-relaxed max-h-[300px] overflow-y-auto text-left"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(selectedResult.result.ai_feedback.detailedAnswers) }}
+                      />
+                    ) : Array.isArray(selectedResult.result.ai_feedback.detailedAnswers) && selectedResult.result.ai_feedback.detailedAnswers.length > 0 ? (
+                      <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                        {selectedResult.result.ai_feedback.detailedAnswers.map((item, idx) => (
+                          <div key={idx} className="p-3.5 rounded-xl border border-white/5 bg-slate-900/60 text-xs space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-brand-cyan">{item.questionNumber}</span>
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                item.status === 'Correct' ? 'bg-emerald-500/10 text-emerald-400' :
+                                item.status === 'Partially Correct' ? 'bg-yellow-500/10 text-yellow-400' :
+                                'bg-rose-500/10 text-rose-400'
+                              }`}>
+                                {item.status}
+                              </span>
+                            </div>
+                            
+                            <div>
+                              <span className="text-[10px] text-slate-500 block">Question:</span>
+                              <p className="text-slate-400 font-light mt-0.5">{item.questionText}</p>
+                            </div>
+
+                            <div className="p-2.5 rounded bg-slate-950/40 border border-white/5">
+                              <span className="text-[9px] text-slate-500 block font-semibold">Student's Answer:</span>
+                              <p className="text-slate-400 italic font-light mt-0.5">"{item.studentAnswer}"</p>
+                            </div>
+
+                            {/* Keywords tags */}
+                            <div className="flex flex-wrap gap-1.5 py-1">
+                              {item.keywordsMatched && item.keywordsMatched.map((k, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded bg-emerald-500/10 text-[9px] text-emerald-400 border border-emerald-500/20">
+                                  ✓ {k}
+                                </span>
+                              ))}
+                              {item.keywordsMissing && item.keywordsMissing.map((k, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded bg-rose-500/10 text-[9px] text-rose-400 border border-rose-500/20">
+                                  ✗ {k}
+                                </span>
+                              ))}
+                            </div>
+
+                            {item.mistake && (
+                              <div className="text-[11px]">
+                                <span className="text-rose-400 font-semibold">Mistake: </span>
+                                <span className="text-slate-300 font-light">{item.mistake}</span>
+                              </div>
+                            )}
+
+                            {item.improvement && (
+                              <div className="text-[11px]">
+                                <span className="text-yellow-400 font-semibold">How to Improve: </span>
+                                <span className="text-slate-300 font-light">{item.improvement}</span>
+                              </div>
+                            )}
+
+                            {item.correctAnswer && (
+                              <div className="p-2.5 rounded bg-brand-purple/5 border border-brand-purple/10 text-[11px]">
+                                <span className="text-brand-cyan font-semibold block mb-0.5">Proper Model Answer to Learn:</span>
+                                <p className="text-slate-300 font-light">{item.correctAnswer}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {/* Strengths & Weak Areas Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Strengths */}
+                  {selectedResult.result.ai_feedback.strengths && (
+                    <div className="p-3.5 rounded-xl border border-emerald-500/10 bg-emerald-500/5">
+                      <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block mb-2">Strengths</span>
+                      <ul className="space-y-1 text-[10px] list-disc list-inside text-slate-400 leading-relaxed font-light">
+                        {selectedResult.result.ai_feedback.strengths.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {/* Weak Areas */}
+                  {selectedResult.result.ai_feedback.weakAreas && (
+                    <div className="p-3.5 rounded-xl border border-brand-pink/10 bg-brand-pink/5">
+                      <span className="text-[9px] font-bold text-brand-pink uppercase tracking-wider block mb-2">Areas of Focus</span>
+                      <ul className="space-y-1 text-[10px] list-disc list-inside text-slate-400 leading-relaxed font-light">
+                        {selectedResult.result.ai_feedback.weakAreas.map((w, i) => (
+                          <li key={i}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-              </>
+
+                {/* Revision Plan */}
+                {selectedResult.result.ai_feedback.revisionPlan && (
+                  <div className="p-4 rounded-xl border border-brand-purple/20 bg-brand-purple/5 space-y-1">
+                    <span className="text-[10px] font-bold text-brand-purple uppercase tracking-wider block">7-Day Study Revision Plan</span>
+                    <p className="text-xs text-slate-300 leading-relaxed font-light">
+                      {selectedResult.result.ai_feedback.revisionPlan}
+                    </p>
+                  </div>
+                )}
+
+                {/* Motivation Message */}
+                {selectedResult.result.ai_feedback.motivationMessage && (
+                  <div className="p-3 text-center rounded-xl bg-gradient-to-r from-brand-purple/10 to-brand-cyan/10 border border-white/5 text-[10px] text-brand-cyan font-semibold">
+                    ✨ "{selectedResult.result.ai_feedback.motivationMessage}"
+                  </div>
+                )}
+              </div>
             )}
+
+            <div className="mt-8 flex gap-3">
+              <button
+                onClick={() => handlePrintReportCard(selectedResult.result, selectedResult.test)}
+                className="flex-1 py-3 text-center text-xs font-bold text-white bg-brand-cyan hover:bg-brand-cyan/80 rounded-xl"
+              >
+                Download PDF Report Card
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedResult(null);
+                }}
+                className="px-6 py-3 text-center text-xs font-bold text-slate-300 bg-slate-900 border border-white/10 rounded-xl hover:bg-slate-800"
+              >
+                Close View
+              </button>
+            </div>
           </div>
         </div>
       )}

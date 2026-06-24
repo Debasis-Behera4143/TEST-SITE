@@ -976,7 +976,7 @@ export const TeacherDashboard = () => {
               {/* Filters & Search */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1 max-w-xs">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-550" />
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
                   <input
                     type="text"
                     placeholder="Search by topic or text..."

@@ -23,7 +23,7 @@ const AccordionPanel = ({ icon: Icon, iconColor, title, children, theme, default
       >
         <div className="flex items-center gap-2.5">
           <Icon className={`h-4 w-4 ${iconColor}`} />
-          <span className={`text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-350' : 'text-slate-700'}`}>{title}</span>
+          <span className={`text-xs font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-slate-400' : 'text-slate-700'}`}>{title}</span>
         </div>
         {open ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
       </button>

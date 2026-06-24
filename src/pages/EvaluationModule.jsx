@@ -132,10 +132,10 @@ const renderMarkdown = (text) => {
   html = html.replace(/^---$/gm, '<hr class="border-white/10 my-4" />');
 
   // Bullet Lists: - item or * item
-  html = html.replace(/^\s*[-*]\s+(.*?)$/gm, '<li class="ml-4 list-disc text-slate-350 my-1 leading-relaxed">$1</li>');
+  html = html.replace(/^\s*[-*]\s+(.*?)$/gm, '<li class="ml-4 list-disc text-slate-400 my-1 leading-relaxed">$1</li>');
 
   // Numbered Lists: 1. item
-  html = html.replace(/^\s*\d+\.\s+(.*?)$/gm, '<li class="ml-4 list-decimal text-slate-350 my-1 leading-relaxed">$1</li>');
+  html = html.replace(/^\s*\d+\.\s+(.*?)$/gm, '<li class="ml-4 list-decimal text-slate-400 my-1 leading-relaxed">$1</li>');
 
   // Process paragraphs
   const lines = html.split('\n');
@@ -145,7 +145,7 @@ const renderMarkdown = (text) => {
     if (trimmed.startsWith('<h') || trimmed.startsWith('<li') || trimmed.startsWith('<pre') || trimmed.startsWith('</pre') || trimmed.startsWith('<hr') || trimmed.startsWith('<p') || trimmed.startsWith('</p')) {
       return line;
     }
-    return `<p class="my-2 text-slate-350 leading-relaxed font-light text-xs">${line}</p>`;
+    return `<p class="my-2 text-slate-400 leading-relaxed font-light text-xs">${line}</p>`;
   });
   
   return processedLines.join('\n');
@@ -652,7 +652,7 @@ export const EvaluationModule = () => {
                 {aiResult && aiResult.studentFeedback && (
                   <div>
                     <span className="block text-[10px] font-bold text-brand-cyan uppercase tracking-wider mb-1">Student Feedback</span>
-                    <p className="text-slate-350 leading-relaxed font-light">{aiResult.studentFeedback}</p>
+                    <p className="text-slate-400 leading-relaxed font-light">{aiResult.studentFeedback}</p>
                   </div>
                 )}
 
@@ -718,7 +718,7 @@ export const EvaluationModule = () => {
                   <div>
                     <span className="block text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1">Strengths</span>
                     <ul className="space-y-1">
-                      {aiResult.strengths.map((s, i) => <li key={i} className="text-[11px] text-slate-350 flex gap-1.5"><span className="text-emerald-400">•</span>{s}</li>)}
+                      {aiResult.strengths.map((s, i) => <li key={i} className="text-[11px] text-slate-400 flex gap-1.5"><span className="text-emerald-400">•</span>{s}</li>)}
                     </ul>
                   </div>
                 )}
@@ -726,7 +726,7 @@ export const EvaluationModule = () => {
                   <div>
                     <span className="block text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1">Focus Areas</span>
                     <ul className="space-y-1">
-                      {aiResult.weakAreas.map((w, i) => <li key={i} className="text-[11px] text-slate-350 flex gap-1.5"><span className="text-red-400">!</span>{w}</li>)}
+                      {aiResult.weakAreas.map((w, i) => <li key={i} className="text-[11px] text-slate-400 flex gap-1.5"><span className="text-red-400">!</span>{w}</li>)}
                     </ul>
                   </div>
                 )}

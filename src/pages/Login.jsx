@@ -357,7 +357,7 @@ export const Login = () => {
                   await logout();
                   window.location.reload();
                 }}
-                className="w-full py-2.5 text-center text-xs font-semibold text-slate-500 hover:text-slate-350 cursor-pointer"
+                className="w-full py-2.5 text-center text-xs font-semibold text-slate-500 hover:text-slate-400 cursor-pointer"
               >
                 Cancel Setup & Sign Out
               </button>
@@ -792,7 +792,7 @@ export const Login = () => {
                       }`}
                     />
                   </div>
-                  <span className={`block text-[10px] ${theme === 'dark' ? 'text-slate-550' : 'text-slate-650'}`}>
+                  <span className={`block text-[10px] ${theme === 'dark' ? 'text-slate-500' : 'text-slate-600'}`}>
                     Input registration numbers generated during student registration.
                   </span>
                 </div>

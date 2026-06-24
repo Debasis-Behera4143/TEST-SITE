@@ -562,7 +562,6 @@ export const mockDb = {
 
         // Trigger emails via Resend
         const { data: studentUser } = await supabase.from('users').select('name, email').eq('id', submission.student_id).single();
-        const { data: sDetails } = await supabase.from('students').select('parent_email').eq('id', submission.student_id).single();
 
         if (studentUser) {
           await sendEmailNotification({
@@ -1208,7 +1207,6 @@ export const mockDb = {
       });
 
       const { data: studentUser } = await supabase.from('users').select('name, email').eq('id', submission.student_id).single();
-      const { data: sDetails } = await supabase.from('students').select('parent_email').eq('id', submission.student_id).single();
       if (studentUser) {
         await sendEmailNotification({
           to: studentUser.email,
@@ -1269,7 +1267,6 @@ export const mockDb = {
     saveDb(db);
 
     const studentUser = db.users.find(u => u.id === submission.student_id);
-    const studentDetails = db.students.find(s => s.id === submission.student_id);
     if (studentUser) {
       sendEmailNotification({
         to: studentUser.email,
@@ -1348,7 +1345,6 @@ export const mockDb = {
       }));
       const gradeChartData = Object.entries(gradeCount).filter(([, v]) => v > 0).map(([grade, count]) => ({ grade, count }));
 
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const trendData = [];
       for (let i = 6; i >= 0; i--) {
         const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);

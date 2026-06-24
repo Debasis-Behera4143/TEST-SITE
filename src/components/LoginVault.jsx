@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
 export const LoginVault = ({ animationType = 'cricket', onExplode }) => {
@@ -15,6 +15,7 @@ export const LoginVault = ({ animationType = 'cricket', onExplode }) => {
     }
 
     if (!mountRef.current) return;
+    const currentMount = mountRef.current;
 
     // 1. Scene setup
     const scene = new THREE.Scene();
@@ -377,8 +378,8 @@ export const LoginVault = ({ animationType = 'cricket', onExplode }) => {
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
-      if (mountRef.current && renderer.domElement) {
-        mountRef.current.removeChild(renderer.domElement);
+      if (currentMount && renderer.domElement) {
+        currentMount.removeChild(renderer.domElement);
       }
       // Clean up geometries
       discGeo.dispose();
@@ -391,7 +392,7 @@ export const LoginVault = ({ animationType = 'cricket', onExplode }) => {
       coreGeo.dispose();
       coreMat.dispose();
     };
-  }, [animationType, phase]);
+  }, [animationType, phase, onExplode]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-md">

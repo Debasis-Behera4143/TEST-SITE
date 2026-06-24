@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
 export const ThreeBackground = ({ active = true }) => {
@@ -6,6 +6,7 @@ export const ThreeBackground = ({ active = true }) => {
 
   useEffect(() => {
     if (!active || !mountRef.current) return;
+    const currentMount = mountRef.current;
 
     // Early exit on mobile viewports to prevent WebGL overhead
     const isMobile = window.innerWidth < 768;
@@ -237,8 +238,8 @@ export const ThreeBackground = ({ active = true }) => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('resize', handleResize);
-      if (mountRef.current && renderer.domElement) {
-        mountRef.current.removeChild(renderer.domElement);
+      if (currentMount && renderer.domElement) {
+        currentMount.removeChild(renderer.domElement);
       }
       starParticles.geometry.dispose();
       particleMaterial.dispose();

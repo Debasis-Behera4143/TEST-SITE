@@ -1,4 +1,4 @@
-﻿import { mockDb } from '../database/mockDb';
+import { mockDb } from '../database/mockDb';
 
 const resendApiKey = import.meta.env.VITE_RESEND_API_KEY;
 
@@ -98,11 +98,6 @@ const infoRow = (label, value, valueColor = '#e2e8f0') => `
   </div>
 `;
 
-const pill = (text, bg, color) => `
-  <span style="display:inline-block;padding:3px 10px;border-radius:999px;background:${bg};color:${color};font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">
-    ${text}
-  </span>
-`;
 
 const generateHtmlBody = (type, details) => {
   if (!details) return wrapHtml('Notification', '<p style="color:#94a3b8;">Academic update from EduTrack AI Portal.</p>');

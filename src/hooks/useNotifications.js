@@ -137,14 +137,19 @@ export const useNotifications = () => {
 
   // Initial fetch and polling for mock changes
   useEffect(() => {
-    fetchNotifications();
+    const timer = setTimeout(() => {
+      fetchNotifications();
+    }, 0);
 
     // Simulating background notifications checking (every 12 seconds)
     const interval = setInterval(() => {
       fetchNotifications();
     }, 12000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, [fetchNotifications]);
 
   return {

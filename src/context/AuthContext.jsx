@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, isLiveMode } from '../database/supabaseClient';
 import { mockDb } from '../database/mockDb';
 import { createClient } from '@supabase/supabase-js';
@@ -11,32 +11,32 @@ export const AuthProvider = ({ children }) => {
   const [parent, setParent] = useState(null);
   const [teacher, setTeacher] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [theme, setTheme] = useState('dark'); // 'dark' | 'light'
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem('edutrack_theme') || 'dark'); // 'dark' | 'light'
+  const [reducedMotion, setReducedMotion] = useState(() => localStorage.getItem('edutrack_reduced_motion') === 'true');
 
   // Google Onboarding states
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [onboardingAuthUser, setOnboardingAuthUser] = useState(null);
   const [authError, setAuthError] = useState('');
 
-  // Apply Theme & Reduced Motion to document element
+  // Apply Theme to document element
   useEffect(() => {
-    const savedTheme = localStorage.getItem('edutrack_theme') || 'dark';
-    setTheme(savedTheme);
     const root = window.document.documentElement;
     root.classList.remove('dark', 'light');
-    root.classList.add(savedTheme);
+    root.classList.add(theme);
     // Apply body classes
-    document.body.className = savedTheme === 'dark' ? 'bg-dark-aurora text-slate-100' : 'bg-light-aurora text-slate-800';
+    document.body.className = theme === 'dark' ? 'bg-dark-aurora text-slate-100' : 'bg-light-aurora text-slate-800';
+  }, [theme]);
 
-    const savedReducedMotion = localStorage.getItem('edutrack_reduced_motion') === 'true';
-    setReducedMotion(savedReducedMotion);
-    if (savedReducedMotion) {
+  // Apply Reduced Motion to document element
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (reducedMotion) {
       root.classList.add('reduced-motion');
     } else {
       root.classList.remove('reduced-motion');
     }
-  }, [theme]);
+  }, [reducedMotion]);
 
   // Load active session
   useEffect(() => {
@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  const loadMockSession = () => {
+  function loadMockSession() {
     const cached = localStorage.getItem('edutrack_auth_user');
     if (cached) {
       const data = JSON.parse(cached);
@@ -100,22 +100,23 @@ export const AuthProvider = ({ children }) => {
       setParent(data.parent);
       setTeacher(data.teacher);
     }
-  };
+  }
 
-  const insertUserProfile = async (profileData) => {
+  async function insertUserProfile(profileData) {
     const { error } = await supabase.from('users').insert(profileData);
     if (error) {
       if (error.message && (error.message.includes('avatar_url') || error.message.includes('column'))) {
-        const { avatar_url, ...rest } = profileData;
+        const rest = { ...profileData };
+        delete rest.avatar_url;
         const { error: retryError } = await supabase.from('users').insert(rest);
         if (retryError) throw retryError;
       } else {
         throw error;
       }
     }
-  };
+  }
 
-  const fetchSupabaseProfile = async (authUser) => {
+  async function fetchSupabaseProfile(authUser) {
     try {
       setAuthError('');
       const { data: profile } = await supabase
@@ -166,7 +167,7 @@ export const AuthProvider = ({ children }) => {
       console.error("Error fetching profile from Supabase:", err);
       setAuthError("Authentication system error. Please contact support.");
     }
-  };
+  }
 
   const toggleTheme = () => {
     const nextTheme = theme === 'dark' ? 'light' : 'dark';
@@ -357,11 +358,12 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const loginWithGoogle = async (role = 'student') => {
+  // eslint-disable-next-line no-unused-vars
+  const loginWithGoogle = async (_role = 'student') => {
     setLoading(true);
     try {
       if (isLiveMode && supabase) {
-        const { data, error } = await supabase.auth.signInWithOAuth({
+        const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
             redirectTo: window.location.origin
@@ -550,4 +552,5 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

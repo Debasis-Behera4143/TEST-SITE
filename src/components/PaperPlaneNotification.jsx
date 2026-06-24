@@ -1,20 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Bell } from 'lucide-react';
 
 export const PaperPlaneNotification = ({ trigger = false, title = '', onFinish }) => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     if (trigger) {
-      setVisible(true);
+      const timer0 = setTimeout(() => {
+        setVisible(true);
+      }, 0);
       const timer = setTimeout(() => {
         setVisible(false);
         if (onFinish) onFinish();
       }, 4000);
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer0);
+        clearTimeout(timer);
+      };
     }
-  }, [trigger]);
+  }, [trigger, onFinish]);
 
   return (
     <AnimatePresence>

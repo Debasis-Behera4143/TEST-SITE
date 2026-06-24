@@ -1,5 +1,4 @@
-import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { CheckCircle2, AlertTriangle, Info, XCircle, X } from 'lucide-react';
 

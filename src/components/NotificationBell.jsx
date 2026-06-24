@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell, CheckCheck, X, BookOpen, Award, FileText } from 'lucide-react';
 import { mockDb } from '../database/mockDb';
-import { supabase, isLiveMode } from '../database/supabaseClient';
 
 const typeIcon = (type) => {
   switch (type) {
@@ -50,11 +49,14 @@ const NotificationBell = ({ userId, theme }) => {
   }, [userId]);
 
   useEffect(() => {
-    fetchNotifications();
+    const timer = setTimeout(() => {
+      fetchNotifications();
+    }, 0);
     const interval = setInterval(fetchNotifications, 30000);
     const handleFocus = () => fetchNotifications();
     window.addEventListener('focus', handleFocus);
     return () => {
+      clearTimeout(timer);
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };

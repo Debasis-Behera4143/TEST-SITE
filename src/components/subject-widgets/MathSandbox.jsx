@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Compass } from 'lucide-react';
 
 export const MathSandbox = ({ theme }) => {
@@ -148,7 +148,6 @@ export const MathSandbox = ({ theme }) => {
         ctx.closePath();
         ctx.stroke();
 
-        const apexY = pyY - 60;
         ctx.strokeStyle = '#ec4899';
 
         ctx.beginPath();

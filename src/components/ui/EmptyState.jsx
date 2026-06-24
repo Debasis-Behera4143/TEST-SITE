@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { useAuth } from '../../context/AuthContext';
 import { Sparkles } from 'lucide-react';
 import Button from './Button';

@@ -1,14 +1,14 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { mockDb } from '../database/mockDb';
 import { supabase, isLiveMode } from '../database/supabaseClient';
 import { encryptPayload } from '../utils/crypto';
 import DashboardHeader from '../components/DashboardHeader';
 import NotificationBell from '../components/NotificationBell';
-import { Button, Card, Modal, Input, Dropdown, Table, Notification, ChartContainer, Skeleton, EmptyState } from '../components/ui';
+import { Skeleton, EmptyState } from '../components/ui';
 import { 
   BookOpen, Award, CheckCircle, Clock, Calendar, Download, Upload, Eye, Trophy, Star, Sparkles, 
-  Activity, ArrowUpRight, BarChart2, Bell, AlertTriangle, FileText, CheckCircle2, ChevronRight, LogOut, Flame,
+  BarChart2, AlertTriangle, FileText, CheckCircle2, LogOut, Flame,
   ShieldCheck, Menu, X, LayoutDashboard
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -33,7 +33,7 @@ const STUDENT_NAV_ITEMS = [
   { id: 'achievements', label: 'Certificates', icon: Award },
 ];
 
-export const renderMarkdown = (text) => {
+const renderMarkdown = (text) => {
   if (!text) return '<p class="text-slate-500 italic">No notes entered yet.</p>';
   
   // Escape HTML to prevent XSS
@@ -94,11 +94,11 @@ export const StudentDashboard = () => {
   const [leaderboard, setLeaderboard] = useState([]);
   const [badges, setBadges] = useState([]);
   const [certificates, setCertificates] = useState([]);
-  const [notifications, setNotifications] = useState([]);
   
   // Dashboard Tabs: 'overview' | 'tests' | 'analytics' | 'museum' | 'achievements'
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeSandbox, setActiveSandbox] = useState('physics');
 
   // Interactive Modals
   const [selectedResult, setSelectedResult] = useState(null);
@@ -132,7 +132,7 @@ export const StudentDashboard = () => {
   const [eggMsg, setEggMsg] = useState('');
 
   // Load data
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     if (!user) return;
     try {
       if (isLiveMode && supabase) {
@@ -170,9 +170,6 @@ export const StudentDashboard = () => {
 
         const { data: certList } = await supabase.from('certificates').select('*').eq('student_id', user.id);
         setCertificates(certList || []);
-
-        const notifs = await mockDb.getNotifications(user.id);
-        setNotifications(notifs || []);
       } else {
         // Mock DB fetch — only assigned tests for this student
         const tList = await mockDb.getAssignedTests(user.id);
@@ -194,32 +191,33 @@ export const StudentDashboard = () => {
 
         const certs = await mockDb.getCertificates(user.id);
         setCertificates(certs);
-
-        const notifs = await mockDb.getNotifications(user.id);
-        setNotifications(notifs);
       }
     } catch (err) {
       console.error("Error loading student dashboard data:", err);
     } finally {
       setTimeout(() => setDataLoading(false), 600);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
-    loadDashboardData();
+    const timer = setTimeout(() => {
+      loadDashboardData();
+    }, 0);
 
     // Trigger paper plane notification on initial entrance
     const planeTimer = setTimeout(() => {
       setPlaneTrigger(true);
     }, 2500);
 
-    return () => clearTimeout(planeTimer);
-  }, [user]);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(planeTimer);
+    };
+  }, [loadDashboardData]);
 
   // Count up animation inside result vault
   useEffect(() => {
     if (selectedResult && vaultOpened) {
-      setCountUpMarks(0);
       let current = 0;
       const target = selectedResult.result.marks_obtained;
       const stepVal = Math.max(1, target / 30);
@@ -354,7 +352,7 @@ export const StudentDashboard = () => {
           if (isLiveMode && supabase) {
             // Upload actual file to Supabase Storage bucket 'answer-sheets'
             const storagePath = `${user.id}_${selectedTestToSubmit.id}_${Date.now()}_answers.${uploadFileType}`;
-            const { data, error: uploadErr } = await supabase.storage
+            const { error: uploadErr } = await supabase.storage
               .from('answer-sheets')
               .upload(storagePath, uploadFile);
 
@@ -519,33 +517,33 @@ export const StudentDashboard = () => {
               "${res.feedback || 'Outstanding conceptual grasp.'}"
             </div>
 
-            {res.ai_feedback?.studentFeedback && (
+            ${res.ai_feedback?.studentFeedback ? `
               <div class="feedback-box" style="border-left-color: #a855f7; margin-top: 15px; font-size: 13px; line-height: 1.5;">
                 <strong>AI Diagnostic Evaluation:</strong><br/>
                 ${res.ai_feedback.studentFeedback}
               </div>
-            )}
+            ` : ''}
 
-            {res.ai_feedback?.strengths && (
+            ${res.ai_feedback?.strengths && res.ai_feedback.strengths.length > 0 ? `
               <div class="feedback-box" style="border-left-color: #10b981; margin-top: 15px; font-size: 13px; line-height: 1.5;">
                 <strong>Key Strengths Identified:</strong><br/>
                 ${res.ai_feedback.strengths.map(s => `• ${s}<br/>`).join('')}
               </div>
-            )}
+            ` : ''}
 
-            {res.ai_feedback?.weakAreas && (
+            ${res.ai_feedback?.weakAreas && res.ai_feedback.weakAreas.length > 0 ? `
               <div class="feedback-box" style="border-left-color: #f43f5e; margin-top: 15px; font-size: 13px; line-height: 1.5;">
                 <strong>Areas Needing Practice:</strong><br/>
                 ${res.ai_feedback.weakAreas.map(w => `• ${w}<br/>`).join('')}
               </div>
-            )}
+            ` : ''}
 
-            {res.ai_feedback?.revisionPlan && (
+            ${res.ai_feedback?.revisionPlan ? `
               <div class="feedback-box" style="border-left-color: #3b82f6; margin-top: 15px; font-size: 13px; line-height: 1.5;">
                 <strong>7-Day AI Revision Study Plan:</strong><br/>
                 ${res.ai_feedback.revisionPlan}
               </div>
-            )}
+            ` : ''}
 
             <div class="footer">
               This document is digitally verified. Generated on ${new Date(res.published_at).toLocaleDateString()}<br/>
@@ -1331,33 +1329,67 @@ export const StudentDashboard = () => {
             <p className="text-xs text-slate-400 mt-2 font-mono uppercase tracking-wider animate-pulse">Loading Sandbox Widgets...</p>
           </div>
         }>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
-            
-            <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-              <h3 className="font-display font-extrabold text-base mb-2 text-brand-cyan">🌌 Physics Gravity Sandbox</h3>
-              <PhysicsSandbox theme={theme} />
+          <div className="space-y-6 text-left">
+            {/* Tab/Pill Sandbox Selector */}
+            <div className="flex flex-wrap gap-2 p-1.5 rounded-2xl bg-slate-950/20 border border-white/5 w-fit">
+              {[
+                { id: 'physics', label: 'Physics Gravity', emoji: '🌌', colorClass: 'border-brand-cyan/20 text-brand-cyan bg-brand-cyan/5' },
+                { id: 'chemistry', label: 'Chemistry Atom', emoji: '🧪', colorClass: 'border-brand-purple/20 text-brand-purple bg-brand-purple/5' },
+                { id: 'biology', label: 'Biology Neurons', emoji: '🧬', colorClass: 'border-brand-pink/20 text-brand-pink bg-brand-pink/5' },
+                { id: 'math', label: 'Math Cubes', emoji: '📐', colorClass: 'border-yellow-500/20 text-yellow-400 bg-yellow-400/5' },
+                { id: 'english', label: 'English Flying Letters', emoji: '📚', colorClass: 'border-indigo-500/20 text-indigo-400 bg-indigo-400/5' }
+              ].map(sub => {
+                const active = activeSandbox === sub.id;
+                return (
+                  <button
+                    key={sub.id}
+                    onClick={() => setActiveSandbox(sub.id)}
+                    className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 cursor-pointer ${
+                      active 
+                        ? `${sub.colorClass} border-current shadow-lg` 
+                        : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                    }`}
+                  >
+                    <span>{sub.emoji}</span>
+                    <span>{sub.label}</span>
+                  </button>
+                );
+              })}
             </div>
 
-            <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-              <h3 className="font-display font-extrabold text-base mb-2 text-brand-purple">🧪 Chemistry Atom Beaker</h3>
-              <ChemistrySandbox theme={theme} />
+            {/* Selected Sandbox Display */}
+            <div className="w-full">
+              {activeSandbox === 'physics' && (
+                <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+                  <h3 className="font-display font-extrabold text-base mb-2 text-brand-cyan">🌌 Physics Gravity Sandbox</h3>
+                  <PhysicsSandbox theme={theme} />
+                </div>
+              )}
+              {activeSandbox === 'chemistry' && (
+                <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+                  <h3 className="font-display font-extrabold text-base mb-2 text-brand-purple">🧪 Chemistry Atom Beaker</h3>
+                  <ChemistrySandbox theme={theme} />
+                </div>
+              )}
+              {activeSandbox === 'biology' && (
+                <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+                  <h3 className="font-display font-extrabold text-base mb-2 text-brand-pink">🧬 Biology DNA & Firing Neurons</h3>
+                  <BiologySandbox theme={theme} />
+                </div>
+              )}
+              {activeSandbox === 'math' && (
+                <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+                  <h3 className="font-display font-extrabold text-base mb-2 text-yellow-400">📐 Math 3D rotating cubes</h3>
+                  <MathSandbox theme={theme} />
+                </div>
+              )}
+              {activeSandbox === 'english' && (
+                <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
+                  <h3 className="font-display font-extrabold text-base mb-2 text-indigo-400">📚 English Flying Letters sandbox</h3>
+                  <EnglishSandbox theme={theme} />
+                </div>
+              )}
             </div>
-
-            <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-              <h3 className="font-display font-extrabold text-base mb-2 text-brand-pink">🧬 Biology DNA & Firing Neurons</h3>
-              <BiologySandbox theme={theme} />
-            </div>
-
-            <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-              <h3 className="font-display font-extrabold text-base mb-2 text-yellow-400">📐 Math 3D rotating cubes</h3>
-              <MathSandbox theme={theme} />
-            </div>
-
-            <div className={`p-6 rounded-3xl border md:col-span-2 ${theme === 'dark' ? 'glass-card-dark border-white/5' : 'glass-card-light border-black/5'}`}>
-              <h3 className="font-display font-extrabold text-base mb-2 text-indigo-400">📚 English Flying Letters sandbox</h3>
-              <EnglishSandbox theme={theme} />
-            </div>
-
           </div>
         </Suspense>
       )}
@@ -1713,6 +1745,7 @@ export const StudentDashboard = () => {
 
                 <button
                   onClick={() => {
+                    setCountUpMarks(0);
                     setVaultOpened(true);
                     confetti({ particleCount: 60, spread: 50 });
                   }}

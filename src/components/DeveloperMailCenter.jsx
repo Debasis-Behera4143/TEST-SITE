@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Mail, X, Trash2, ShieldAlert, CheckCircle, ExternalLink, Calendar, GraduationCap } from 'lucide-react';
 import { mockDb } from '../database/mockDb';
 
@@ -14,10 +14,15 @@ export const DeveloperMailCenter = ({ theme }) => {
   };
 
   useEffect(() => {
-    fetchEmails();
+    const timer = setTimeout(() => {
+      fetchEmails();
+    }, 0);
     // Poll for mock emails changes
     const interval = setInterval(fetchEmails, 2000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleClear = async () => {

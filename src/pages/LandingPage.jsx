@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { GraduationCap, BookOpen, BrainCircuit, BarChart3, BellRing, Sparkles, ArrowRight, ShieldCheck, Sun, Moon, Zap, ZapOff } from 'lucide-react';
+import { GraduationCap, BrainCircuit, BarChart3, BellRing, Sparkles, ArrowRight, ShieldCheck, Sun, Moon, Zap, ZapOff } from 'lucide-react';
 import { ThreeBackground } from '../components/ThreeBackground';
 import { useAuth } from '../context/AuthContext';
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Rocket, ShieldCheck } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -9,8 +9,10 @@ export const RocketSubmission = ({ trigger = false, onFinish }) => {
 
   useEffect(() => {
     if (trigger) {
-      setVisible(true);
-      setShowStatus(false);
+      const timer0 = setTimeout(() => {
+        setVisible(true);
+        setShowStatus(false);
+      }, 0);
       
       // Animate steps
       const statusTimer = setTimeout(() => {
@@ -29,11 +31,12 @@ export const RocketSubmission = ({ trigger = false, onFinish }) => {
       }, 4500);
 
       return () => {
+        clearTimeout(timer0);
         clearTimeout(statusTimer);
         clearTimeout(endTimer);
       };
     }
-  }, [trigger]);
+  }, [trigger, onFinish]);
 
   return (
     <AnimatePresence>

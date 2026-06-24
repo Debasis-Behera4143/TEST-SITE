@@ -1,18 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../database/supabaseClient';
+import LoginVault from '../components/LoginVault';
 import { 
   GraduationCap, ArrowRight, ShieldCheck, Mail, Lock, Sparkles, User, 
-  AlertCircle, Sun, Moon, Zap, ZapOff, UserPlus, BookOpen, Key,
+  AlertCircle, Sun, Moon, Zap, ZapOff, BookOpen, Key,
   Eye, EyeOff
 } from 'lucide-react';
 
 
 export const Login = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { login, signup, theme, toggleTheme, reducedMotion, toggleReducedMotion, user, isLiveMode, loginWithGoogle, sendOtp, verifyOtpAndReset, logout, needsOnboarding, onboardingAuthUser, authError, completeGoogleOnboarding } = useAuth() || {};
+  const { login, signup, theme, toggleTheme, reducedMotion, toggleReducedMotion, user, isLiveMode, loginWithGoogle, sendOtp, verifyOtpAndReset, logout, needsOnboarding, authError, completeGoogleOnboarding } = useAuth() || {};
 
   // Onboarding states
   const [onboardingRole, setOnboardingRole] = useState('student'); // 'student' | 'teacher'
@@ -24,7 +23,7 @@ export const Login = () => {
   const [isForgot, setIsForgot] = useState(false);
 
   // Tabs for Login: 'credentials' | 'regnumber'
-  const [activeTab, setActiveTab] = useState('credentials');
+  const [activeTab] = useState('credentials');
   
   // Input fields
   const [email, setEmail] = useState('');
@@ -49,7 +48,7 @@ export const Login = () => {
   // Vault breaking animation states
   const [showVault, setShowVault] = useState(false);
   const [vaultRedirectUrl, setVaultRedirectUrl] = useState('');
-  const [selectedAnimationMode, setSelectedAnimationMode] = useState('cricket');
+  const [selectedAnimationMode] = useState('cricket');
 
   // Redirect if logged in
   useEffect(() => {
@@ -120,10 +119,12 @@ export const Login = () => {
     setSubmitting(false);
     if (loginErr) {
       setError(loginErr);
+    } else {
       const targetRole = activeTab === 'regnumber' 
         ? 'student' 
         : (email.includes('teacher') || email.includes('admin') ? 'teacher' : 'student');
-      navigate(`/${targetRole}-dashboard`);
+      setVaultRedirectUrl(`/${targetRole}-dashboard`);
+      setShowVault(true);
     }
   };
 

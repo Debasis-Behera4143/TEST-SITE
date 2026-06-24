@@ -1,5 +1,3 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Sun, Moon, Zap, ZapOff, LogOut } from 'lucide-react';
 
@@ -11,7 +9,6 @@ export const DashboardHeader = ({
   nameSuffix = null,
   notificationSlot = null,
 }) => {
-  const navigate = useNavigate();
   const { user, logout, theme, toggleTheme, reducedMotion, toggleReducedMotion } = useAuth() || {};
 
   if (!user) return null;

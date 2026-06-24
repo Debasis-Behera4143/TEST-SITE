@@ -122,7 +122,6 @@ const getFallbackFeedback = (subject, marks, totalMarks, teacherRemarks, testTit
   const isPassing = percentage >= 60;
 
   // Dynamically generate fallback answers based on testTitle and testDescription
-  let detailedAnswers = [];
   let questionsList = [];
 
   if (testDescription) {
@@ -130,7 +129,7 @@ const getFallbackFeedback = (subject, marks, totalMarks, teacherRemarks, testTit
     const rawLines = testDescription.split(/[\n;]+/).map(l => l.trim()).filter(l => l.length > 8);
     // Filter out greeting text or general instructions
     const questionLines = rawLines.filter(line => 
-      line.match(/^(q\d+|question|\d+[\.\)\-:]|\-\s+|[a-z]\s*\))/i) || 
+      line.match(/^(q\d+|question|\d+[.):-]|-\s+|[a-z]\s*\))/i) || 
       line.includes('?') || 
       line.toLowerCase().includes('explain') || 
       line.toLowerCase().includes('describe') || 
@@ -153,9 +152,9 @@ const getFallbackFeedback = (subject, marks, totalMarks, teacherRemarks, testTit
     ];
   }
 
-  detailedAnswers = questionsList.map((qText, index) => {
+  const detailedAnswers = questionsList.map((qText, index) => {
     // Clean leading numbers or bullet markers
-    const cleanQText = qText.replace(/^(q\d+|question|\d+[\.\)\-:]|\-\s+|[a-z]\s*\))\s*/i, '');
+    const cleanQText = qText.replace(/^(q\d+|question|\d+[.):-]|-\s+|[a-z]\s*\))\s*/i, '');
     return {
       questionNumber: `Question ${index + 1}`,
       questionText: cleanQText,

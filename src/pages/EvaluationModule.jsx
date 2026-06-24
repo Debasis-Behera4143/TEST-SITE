@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { mockDb } from '../database/mockDb';
@@ -7,8 +7,7 @@ import { decryptPayload } from '../utils/crypto';
 import { generateAIEvaluationFeedback } from '../services/gemini';
 import {
   ArrowLeft, Sparkles, BrainCircuit, CheckCircle, Save, CheckSquare,
-  RefreshCw, AlertTriangle, Eye, Download, ZoomIn, ZoomOut, FileText,
-  Trash2, Plus
+  RefreshCw, AlertTriangle, Eye, Download, ZoomIn, ZoomOut, FileText
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -99,7 +98,7 @@ const formatDetailedAnswersToText = (answers) => {
   }).join('\n\n----------------------------------------\n\n');
 };
 
-export const renderMarkdown = (text) => {
+const renderMarkdown = (text) => {
   if (!text) return '<p class="text-slate-500 italic">No notes entered yet.</p>';
   
   // Escape HTML to prevent XSS
@@ -174,7 +173,6 @@ export const EvaluationModule = () => {
 
   // File viewer state
   const [zoom, setZoom] = useState(1);
-  const [fileViewError, setFileViewError] = useState(false);
 
   // AI state
   const [aiRunning, setAiRunning] = useState(false);
@@ -184,17 +182,20 @@ export const EvaluationModule = () => {
 
   // Sync formatted text representing detailedAnswers array/string
   useEffect(() => {
-    if (aiResult) {
-      if (typeof aiResult.detailedAnswers === 'string') {
-        setDetailedAnswersText(aiResult.detailedAnswers);
-      } else if (Array.isArray(aiResult.detailedAnswers)) {
-        setDetailedAnswersText(formatDetailedAnswersToText(aiResult.detailedAnswers));
+    const timer = setTimeout(() => {
+      if (aiResult) {
+        if (typeof aiResult.detailedAnswers === 'string') {
+          setDetailedAnswersText(aiResult.detailedAnswers);
+        } else if (Array.isArray(aiResult.detailedAnswers)) {
+          setDetailedAnswersText(formatDetailedAnswersToText(aiResult.detailedAnswers));
+        } else {
+          setDetailedAnswersText('');
+        }
       } else {
         setDetailedAnswersText('');
       }
-    } else {
-      setDetailedAnswersText('');
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [aiResult]);
 
   const handleDetailedAnswersTextChange = (val) => {
@@ -219,18 +220,6 @@ export const EvaluationModule = () => {
     });
   };
 
-  const startManualAudit = () => {
-    setAiResult({
-      studentFeedback: 'Manual feedback by teacher.',
-      parentFeedback: 'Manual feedback by teacher.',
-      strengths: ['Good overall attempt.'],
-      weakAreas: ['Focus on revision.'],
-      improvementSuggestions: ['Study consistently.'],
-      revisionPlan: 'Days 1-7: Standard revision.',
-      motivationMessage: 'Keep up the effort!',
-      detailedAnswers: ''
-    });
-  };
 
   const loadSubmission = useCallback(async () => {
     if (!submissionId) return;
@@ -311,7 +300,12 @@ export const EvaluationModule = () => {
     }
   }, [submissionId]);
 
-  useEffect(() => { loadSubmission(); }, [loadSubmission]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadSubmission();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadSubmission]);
 
   // â”€â”€â”€ SAVE DRAFT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSaveDraft = async () => {
@@ -463,7 +457,7 @@ export const EvaluationModule = () => {
       setStatusMsg('AI analysis complete. Prefilled suggestions are editable.');
       setStatusType('success');
       setTimeout(() => setStatusMsg(''), 3000);
-    } catch (err) {
+    } catch {
       setStatusMsg('AI analysis failed. You can still evaluate manually.');
       setStatusType('error');
     } finally {
@@ -575,14 +569,12 @@ export const EvaluationModule = () => {
                     src={fileUrl}
                     title="Answer Sheet PDF"
                     style={{ width: `${zoom * 100}%`, minHeight: '450px', border: 'none', borderRadius: 8 }}
-                    onError={() => setFileViewError(true)}
                   />
                 ) : isImage ? (
                   <img
                     src={fileUrl}
                     alt="Answer Sheet"
                     style={{ width: `${zoom * 100}%`, maxWidth: '100%', borderRadius: 8 }}
-                    onError={() => setFileViewError(true)}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">

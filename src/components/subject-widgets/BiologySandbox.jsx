@@ -1,5 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Heart } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 export const BiologySandbox = ({ theme }) => {
   const canvasRef = useRef(null);

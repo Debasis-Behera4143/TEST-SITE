@@ -742,7 +742,7 @@ export const StudentDashboard = () => {
       />
 
       {/* Tabs Switcher */}
-      <div className="flex lg:hidden bg-slate-955/20 p-1.5 rounded-2xl border border-white/5 mb-8 w-fit overflow-x-auto no-scrollbar">
+      <div className="flex lg:hidden bg-slate-950/20 p-1.5 rounded-2xl border border-white/5 mb-8 w-fit overflow-x-auto no-scrollbar">
         {['overview', 'tests', 'analytics', 'achievements'].map((tab) => (
           <button
             key={tab}
@@ -1137,11 +1137,11 @@ export const StudentDashboard = () => {
                 Focus Chapters (Improvement Needed)
               </h4>
               <ul className="mt-4 space-y-2 text-xs font-light text-slate-300">
-                <li className="flex justify-between items-center p-2 rounded bg-slate-955/20">
+                <li className="flex justify-between items-center p-2 rounded bg-slate-950/20">
                   <span>Chemical Equilibrium & Catalyst Rates</span>
                   <span className="text-red-400 font-semibold font-mono">CHEM-303</span>
                 </li>
-                <li className="flex justify-between items-center p-2 rounded bg-slate-955/20">
+                <li className="flex justify-between items-center p-2 rounded bg-slate-950/20">
                   <span>Three-Dimensional Vector Coordinates</span>
                   <span className="text-red-400 font-semibold font-mono">MATH-101</span>
                 </li>
@@ -1154,11 +1154,11 @@ export const StudentDashboard = () => {
                 Strong Concept Pillars (Excellence)
               </h4>
               <ul className="mt-4 space-y-2 text-xs font-light text-slate-350">
-                <li className="flex justify-between items-center p-2 rounded bg-slate-955/20">
+                <li className="flex justify-between items-center p-2 rounded bg-slate-950/20">
                   <span>Carbon Ring Isomer & Benzene Structures</span>
                   <span className="text-emerald-400 font-semibold font-mono">CHEM-303</span>
                 </li>
-                <li className="flex justify-between items-center p-2 rounded bg-slate-955/20">
+                <li className="flex justify-between items-center p-2 rounded bg-slate-950/20">
                   <span>Maxwell Electromagnetism Integration</span>
                   <span className="text-emerald-400 font-semibold font-mono">PHYS-202</span>
                 </li>
@@ -1363,7 +1363,7 @@ export const StudentDashboard = () => {
       {selectedResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className={`w-full max-w-xl p-5 sm:p-8 rounded-2xl sm:rounded-3xl border relative max-h-[85vh] overflow-y-auto ${
-            theme === 'dark' ? 'bg-slate-955 border-white/10 text-white' : 'bg-white border-black/10 text-slate-900'
+            theme === 'dark' ? 'bg-slate-950 border-white/10 text-white' : 'bg-white border-black/10 text-slate-900'
           }`}>
             <button 
               onClick={() => {

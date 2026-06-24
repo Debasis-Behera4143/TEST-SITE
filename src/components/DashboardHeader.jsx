@@ -46,7 +46,7 @@ export const DashboardHeader = ({
 
       {/* Middle/Stats Section */}
       {statsContainer && (
-        <div className="w-full md:w-auto flex flex-wrap justify-start md:justify-end gap-4 md:gap-6 border-t border-b border-white/5 py-4 md:py-0 md:border-none">
+        <div className="w-full md:w-auto flex flex-row items-center justify-between md:justify-end gap-4 md:gap-6 border-t border-b border-slate-200 dark:border-white/10 py-4 md:py-0 md:border-none">
           {statsContainer}
         </div>
       )}
